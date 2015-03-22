@@ -297,3 +297,11 @@ if ($ㄒ) {
 EXPECT
 Name "팣칵ぇ::ʎ" used only once: possible typo at - line 11.
 Use of uninitialized value $팣칵ぇ::ʎ in print at - line 11.
+########
+# from t/op/gv.t
+use warnings;
+no warnings "once";
+my $copy = *XX;
+my $a = sprintf "%d", $copy;
+EXPECT
+Argument "*main::XX" isn't numeric in sprintf at - line 5.
