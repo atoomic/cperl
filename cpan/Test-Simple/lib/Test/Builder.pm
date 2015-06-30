@@ -4,8 +4,9 @@ use 5.006;
 use strict;
 use warnings;
 
-our $VERSION = '1.401014c'; # modernized
+our $VERSION = '1.001014_01c'; # modernized
 $VERSION =~ s/c$//;
+$VERSION = eval $VERSION;    ## no critic (BuiltinFunctions::ProhibitStringyEval)
 
 BEGIN {
     if( $] < 5.008 ) {
@@ -63,8 +64,8 @@ BEGIN {
     # 5.8.0's threads::shared is busted when threads are off
     # and earlier Perls just don't have that module at all.
     else {
-        *share = sub { return $_[0] };
-        *lock  = sub { 0 };
+      *share = sub { $_[0] };
+      *lock  = sub (\$) { 0 } if $] < 5.008001;
     }
 }
 
@@ -788,7 +789,7 @@ sub ok ( $self, $test, $name? ) {
     # store, so we turn it into a boolean.
     $test = $test ? 1 : 0;
 
-    lock $self->{Curr_Test};
+    lock( $self->{Curr_Test} );
     $self->{Curr_Test}++;
 
     # In case $name is a string overloaded object, force it to stringify.
