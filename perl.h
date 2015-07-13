@@ -1267,7 +1267,7 @@ EXTERN_C char *crypt(const char *, const char *);
 #   define RESTORE_ERRNO  (errno = saved_errno)
 #endif
 
-#define ERRSV GvSVn(PL_errgv)
+#define ERRSV GvPVn(PL_errgv)
 
 /* contains inlined gv_add_by_type */
 #define CLEAR_ERRSV() STMT_START {					\
@@ -1279,7 +1279,7 @@ EXTERN_C char *crypt(const char *, const char *);
 	clresv_newemptypv:						\
 	*svp = newSVpvs("");						\
     } else {								\
-	SV *const errsv = *svp;						\
+	PV *const errsv = *svp;						\
 	sv_setpvs(errsv, "");						\
 	SvPOK_only(errsv);						\
 	if (SvMAGICAL(errsv)) {						\
@@ -5580,7 +5580,7 @@ typedef enum {
  * constructing debug output are included.  Needed always,
  * not just when DEBUGGING, though, because of the re extension. c*/
 struct perl_debug_pad {
-  SV pad[3];
+    PV pad[3];
 };
 
 #define PERL_DEBUG_PAD(i)	&(PL_debug_pad.pad[i])

@@ -1229,7 +1229,7 @@ value, or 0 to ask for it to be computed.
 */
 
 STATIC SV *
-S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
+S_hv_delete_common(pTHX_ HV *hv, PV *keysv, const char *key, I32 klen,
 		   int k_flags, I32 d_flags, U32 hash)
 {
     dVAR;

@@ -3647,7 +3647,7 @@ S_doeval_compile(pTHX_ U8 gimme, CV* outside, U32 seq, HV *hh)
 
 
 STATIC PerlIO *
-S_check_type_and_open(pTHX_ SV *name)
+S_check_type_and_open(pTHX_ PV *name)
 {
     Stat_t st;
     STRLEN len;
@@ -3707,7 +3707,7 @@ S_check_type_and_open(pTHX_ SV *name)
 
 #ifndef PERL_DISABLE_PMC
 STATIC PerlIO *
-S_doopen_pm(pTHX_ SV *name)
+S_doopen_pm(pTHX_ PV *name)
 {
     STRLEN namelen;
     const char *p = SvPV_const(name, namelen);

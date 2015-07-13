@@ -463,7 +463,7 @@ S_tokereport(pTHX_ I32 rv, const YYSTYPE* lvalp)
 	enum token_type type = TOKENTYPE_NONE;
         int itype = (int)type;
 	const char *name = S_toke_name(aTHX_ rv, &itype);
-	SV* const report = newSVpvs("<== ");
+	PV* const report = newSVpvs("<== ");
         if (((U32)rv) & 0xff000000) { /* <<24 */
 	    Perl_sv_catpvf(aTHX_ report, "%c|", (char)(((U32)rv & 0xff000000) >> 24));
             rv &= 0xffffff;
@@ -1649,7 +1649,7 @@ Perl_lex_read_space(pTHX_ U32 flags)
 
 /*
 
-=for apidoc EXMp|bool|validate_proto|SV *name|SV *proto|bool warn
+=for apidoc EXMp|bool|validate_proto|PV *name|PV *proto|bool warn
 
 This function performs syntax checking on a prototype, C<proto>.
 If C<warn> is true, any illegal characters or mismatched brackets
@@ -1667,7 +1667,7 @@ Note that C<NULL> is a valid C<proto> and will always return C<true>.
  */
 
 bool
-Perl_validate_proto(pTHX_ SV *name, SV *proto, bool warn)
+Perl_validate_proto(pTHX_ PV *name, PV *proto, bool warn)
 {
     STRLEN len, origlen;
     char *p = proto ? SvPV(proto, len) : NULL;

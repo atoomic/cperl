@@ -55,10 +55,8 @@ S_CvDEPTHp(const CV * const sv)
 PERL_STATIC_INLINE char *
 S_strip_spaces(pTHX_ const char * orig, STRLEN * const len)
 {
-    SV * tmpsv;
-    char * tmps;
-    tmpsv = newSVpvn_flags(orig, *len, SVs_TEMP);
-    tmps = SvPVX(tmpsv);
+    PV * tmpsv = newSVpvn_flags(orig, *len, SVs_TEMP);
+    char * tmps = SvPVX(tmpsv);
     while ((*len)--) {
 	if (!isSPACE(*orig))
 	    *tmps++ = *orig;
@@ -75,7 +73,7 @@ S_strip_spaces(pTHX_ const char * orig, STRLEN * const len)
 #if defined(PERL_CORE) || defined(PERL_EXT)
 /* assumes get-magic and stringification have already occurred */
 PERL_STATIC_INLINE STRLEN
-S_MgBYTEPOS(pTHX_ MAGIC *mg, SV *sv, const char *s, STRLEN len)
+S_MgBYTEPOS(pTHX_ MAGIC *mg, PV *sv, const char *s, STRLEN len)
 {
     assert(mg->mg_type == PERL_MAGIC_regex_global);
     assert(mg->mg_len != -1);

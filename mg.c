@@ -294,7 +294,7 @@ higher.  Use C<sv_len()> instead.
 */
 
 U32
-Perl_mg_length(pTHX_ SV *sv)
+Perl_mg_length(pTHX_ PV *sv)
 {
     MAGIC* mg;
     STRLEN len;
@@ -305,7 +305,7 @@ Perl_mg_length(pTHX_ SV *sv)
         const MGVTBL * const vtbl = mg->mg_virtual;
 	if (vtbl && vtbl->svt_len) {
             const I32 mgs_ix = SSNEW(sizeof(MGS));
-	    save_magic(mgs_ix, sv);
+	    save_magic(mgs_ix, MUTABLE_SV(sv));
 	    /* omit MGf_GSKIP -- not changed here */
 	    len = vtbl->svt_len(aTHX_ sv, mg);
 	    restore_magic(INT2PTR(void*, (IV)mgs_ix));
@@ -707,12 +707,12 @@ Perl_magic_regdatum_set(pTHX_ SV *sv, MAGIC *mg)
 } STMT_END
 
 void
-Perl_emulate_cop_io(pTHX_ const COP *const c, SV *const sv)
+Perl_emulate_cop_io(pTHX_ const COP *const c, PV *const sv)
 {
     PERL_ARGS_ASSERT_EMULATE_COP_IO;
 
     if (!(CopHINTS_get(c) & (HINT_LEXICAL_IO_IN|HINT_LEXICAL_IO_OUT)))
-	sv_setsv(sv, &PL_sv_undef);
+	sv_setsv(MUTABLE_SV(sv), &PL_sv_undef);
     else {
 	sv_setpvs(sv, "");
 	SvUTF8_off(sv);
@@ -731,7 +731,7 @@ Perl_emulate_cop_io(pTHX_ const COP *const c, SV *const sv)
 }
 
 STATIC void
-S_fixup_errno_string(pTHX_ SV* sv)
+S_fixup_errno_string(pTHX_ PV* sv)
 {
     /* Do what is necessary to fixup the non-empty string in 'sv' for return to
      * Perl space. */
@@ -1794,7 +1794,7 @@ Returns the SV (if any) returned by the method, or C<NULL> on failure.
 */
 
 SV*
-Perl_magic_methcall(pTHX_ SV *sv, const MAGIC *mg, SV *meth, U32 flags,
+Perl_magic_methcall(pTHX_ SV *sv, const MAGIC *mg, PV *meth, U32 flags,
 		    U32 argc, ...)
 {
     dSP;
@@ -1852,7 +1852,7 @@ Perl_magic_methcall(pTHX_ SV *sv, const MAGIC *mg, SV *meth, U32 flags,
 /* wrapper for magic_methcall that creates the first arg */
 
 STATIC SV*
-S_magic_methcall1(pTHX_ SV *sv, const MAGIC *mg, SV *meth, U32 flags,
+S_magic_methcall1(pTHX_ SV *sv, const MAGIC *mg, PV *meth, U32 flags,
     int n, SV *val)
 {
     SV* arg1 = NULL;
@@ -1877,7 +1877,7 @@ S_magic_methcall1(pTHX_ SV *sv, const MAGIC *mg, SV *meth, U32 flags,
 }
 
 STATIC int
-S_magic_methpack(pTHX_ SV *sv, const MAGIC *mg, SV *meth)
+S_magic_methpack(pTHX_ SV *sv, const MAGIC *mg, PV *meth)
 {
     SV* ret;
 
