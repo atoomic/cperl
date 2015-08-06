@@ -8471,13 +8471,6 @@ S_op_const_sv(pTHX_ const OP *o, CV *compcv, bool allow_lex)
  * In contrast to op_const_sv allow short op sequences which are not
  * constant folded.
  * max 15 ops, no new pad, no intermediate return, no recursion, ...
- * cv_inline needs to translate the args, change return to jumps.
- * handle args: shift, = @_ or just accept SIGNATURED subs with PERL_FAKE_SIGNATURE.
- * if arg is call-by-value. make a copy.
- * with local need to add SAVETMPS/FREETMPS.
- * maybe keep ENTER/LEAVE
- *
- * $lhs = call(...); => $lhs = do {...inlined...};
  */
 
 #ifndef PERL_MAX_INLINE_OPS
@@ -8514,6 +8507,47 @@ S_cv_check_inline(pTHX_ const OP *o, CV *compcv)
 	}
     }
     return TRUE;
+}
+
+/* cv_do_inline needs to translate the args,
+ * handle args: shift, = @_ or just accept SIGNATURED subs with PERL_FAKE_SIGNATURE.
+ * if arg is call-by-value. make a copy.
+ * adjust or add targs,
+ * with local need to add SAVETMPS/FREETMPS.
+ * maybe keep ENTER/LEAVE
+ *
+ * $lhs = call(...); => $lhs = do {...inlined...};
+ */
+
+static OP*
+S_cv_do_inline(pTHX_ const OP *o, const OP *cvop, CV *cv)
+{
+    /* WIP splice inlined ENTERSUB into the current body */
+    const OP *pushmarkop = o;
+
+    assert(o); /* the pushmark */
+    assert(cv);
+    assert(OP_TYPE_IS(cvop, OP_ENTERSUB));
+    /* first translate the args to the temp vars */
+
+    for (; o; o = o->op_next) {
+	const OPCODE type = o->op_type;
+	if (type == OP_NEXTSTATE || type == OP_DBSTATE
+            || type == OP_NULL   || type == OP_LINESEQ
+            || type == OP_PUSHMARK)
+            continue;
+	if (type == OP_RETURN    || type == OP_GOTO
+            || type == OP_CALLER || type == OP_WARN
+            || type == OP_DIE    || type == OP_RESET
+            || type == OP_RUNCV  || type == OP_PADRANGE)
+	    return NULL;
+	else if (type == OP_LEAVESUB)
+	    break;
+	else if (type == OP_ENTERSUB) {
+	    return NULL;
+	}
+    }
+    return (OP*)pushmarkop;
 }
 
 static bool
@@ -15544,7 +15578,6 @@ Perl_rpeep(pTHX_ OP *o)
 	    break;
 
         case OP_PUSHMARK:
-
             /* Given
                  5 repeat/DOLIST
                  3   ex-list
@@ -15585,6 +15618,33 @@ Perl_rpeep(pTHX_ OP *o)
                     o->op_private = 0;
                     DEBUG_kv(Perl_deb(aTHX_ "rpeep: o=0x%p repeat\n", o));
                     break;
+                }
+            }
+
+            /* inline subs or methods */
+            {
+                int i;
+                OP* o2 = o;
+                OP* gvop = NULL;
+                /* scan from pushmark to the next entersub call */
+                for (; o2 && i<6; o2 = o2->op_next, i++) {
+                    if (OP_TYPE_IS(o2, OP_GV))
+                        gvop = o2;
+                    if (OP_TYPE_IS(o2, OP_ENTERSUB))
+                        break;
+                }
+                if (o2 && OP_TYPE_IS(o2, OP_ENTERSUB) && gvop) {
+#ifdef USE_ITHREADS
+                    SV *gv = PAD_SVl(cPADOPx(gvop)->op_padix);
+#else
+                    SV *gv = cSVOPx(gvop)->op_sv;
+#endif
+                    CV* cv;
+                    if (gv && SvTYPE(gv) == SVt_PVGV && (cv = GvCV(gv))
+                     && CvINLINABLE(cv)) {
+                        DEBUG_v(deb("rpeep: inline cv %s\n", GvNAME_get(gv)));
+                        o2 = S_cv_do_inline(o, o2, cv);
+                    }
                 }
             }
 
