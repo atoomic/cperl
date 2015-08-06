@@ -120,6 +120,7 @@ recursive, but it's recursive on basic blocks, not on tree nodes.
     S_match_type(aTHX_ stash, coretype, aname, (bool)au8, castable)
 #define match_type1(sig, arg) S_match_type1(sig, arg)
 #define match_type2(sig, arg1, arg2) S_match_type2(sig, arg1, arg2)
+static bool S_cv_check_inline(pTHX_ const OP *o, CV *compcv);
 
 static const char array_passed_to_stat[] =
     "Array passed to stat will be coerced to a scalar";
@@ -2606,6 +2607,9 @@ S_postprocess_optree(pTHX_ CV *cv, OP *root, OP **startp)
     CALL_PEEP(*startp);
     finalize_optree(root);
     S_prune_chain_head(startp);
+
+    if (*startp && S_cv_check_inline(*startp, cv))
+        CvINLINABLE_on(cv);
 
     /* now that optimizer has done its work, adjust pad values */
     if (cv)
@@ -8395,7 +8399,8 @@ Perl_cv_const_sv_or_av(const CV * const cv)
     return CvCONST(cv) ? MUTABLE_SV(CvXSUBANY(cv).any_ptr) : NULL;
 }
 
-/* op_const_sv:  examine an optree to determine whether it's in-lineable.
+/* op_const_sv:  examine an optree to determine whether it's in-lineable
+ *               into a single CONST op.
  * Can be called in 2 ways:
  *
  * !allow_lex
@@ -8410,13 +8415,13 @@ Perl_cv_const_sv_or_av(const CV * const cv)
  */
 
 static SV *
-S_op_const_sv(pTHX_ const OP *o, CV *cv, bool allow_lex)
+S_op_const_sv(pTHX_ const OP *o, CV *compcv, bool allow_lex)
 {
     SV *sv = NULL;
     bool padsv = FALSE;
 
     assert(o);
-    assert(cv);
+    assert(compcv);
 
     for (; o; o = o->op_next) {
 	const OPCODE type = o->op_type;
@@ -8450,7 +8455,7 @@ S_op_const_sv(pTHX_ const OP *o, CV *cv, bool allow_lex)
 	}
     }
     if (padsv) {
-	CvCONST_on(cv);
+	CvCONST_on(compcv);
 	return NULL;
     }
     DEBUG_k(Perl_deb(aTHX_ "op_const_sv: inlined SV 0x%p\n", sv));
@@ -8460,6 +8465,55 @@ S_op_const_sv(pTHX_ const OP *o, CV *cv, bool allow_lex)
     }
 #endif
     return sv;
+}
+
+/* cv_check_inline:  examine an optree to determine whether it's in-lineable.
+ * In contrast to op_const_sv allow short op sequences which are not
+ * constant folded.
+ * max 15 ops, no new pad, no intermediate return, no recursion, ...
+ * cv_inline needs to translate the args, change return to jumps.
+ * handle args: shift, = @_ or just accept SIGNATURED subs with PERL_FAKE_SIGNATURE.
+ * if arg is call-by-value. make a copy.
+ * with local need to add SAVETMPS/FREETMPS.
+ * maybe keep ENTER/LEAVE
+ *
+ * $lhs = call(...); => $lhs = do {...inlined...};
+ */
+
+#ifndef PERL_MAX_INLINE_OPS
+#define PERL_MAX_INLINE_OPS 15
+#endif
+
+static bool
+S_cv_check_inline(pTHX_ const OP *o, CV *compcv)
+{
+    const OP *firstop = o;
+    unsigned short i = 0;
+
+    assert(o);
+    if (!compcv) return FALSE;
+
+    for (; o; o = o->op_next) {
+	const OPCODE type = o->op_type;
+        i++;
+
+        if (i > PERL_MAX_INLINE_OPS) return FALSE;
+	if (type == OP_NEXTSTATE || type == OP_DBSTATE
+            || type == OP_NULL   || type == OP_LINESEQ
+            || type == OP_PUSHMARK)
+            continue;
+	if (type == OP_RETURN    || type == OP_GOTO
+            || type == OP_CALLER || type == OP_WARN
+            || type == OP_DIE    || type == OP_RESET
+            || type == OP_RUNCV  || type == OP_PADRANGE)
+	    return FALSE;
+	else if (type == OP_LEAVESUB)
+	    break;
+	else if (type == OP_ENTERSUB && cUNOPx(o)->op_first == firstop) {
+	    return FALSE;
+	}
+    }
+    return TRUE;
 }
 
 static bool
@@ -12722,9 +12776,9 @@ Perl_ck_entersub_args_proto(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
 			break;
 		    case '$':
 			if (o3->op_type == OP_RV2SV ||
-				o3->op_type == OP_PADSV ||
-				o3->op_type == OP_HELEM ||
-				o3->op_type == OP_AELEM)
+                            o3->op_type == OP_PADSV ||
+                            o3->op_type == OP_HELEM ||
+                            o3->op_type == OP_AELEM)
 			    goto wrapref;
 			if (!contextclass) {
 			    /* \$ accepts any scalar lvalue */
