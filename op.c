@@ -3095,7 +3095,7 @@ S_finalize_op(pTHX_ OP* o)
             }
 #  else
             /* {and,or,xor}assign use a hackish unop'y sassign without last */
-            if (has_last && !OpHAS_SIBLING(kid)
+            if (has_last && !OpHAS_SIBLING(kid) && !OP_TYPE_IS_NN(o, OP_NULL)
                 && (OP_TYPE_ISNT_NN(o, OP_SASSIGN) || cLISTOPo->op_last))
                 assert(kid == cLISTOPo->op_last);
 #  endif
@@ -3103,7 +3103,8 @@ S_finalize_op(pTHX_ OP* o)
 #endif
 
 	for (kid = cUNOPo->op_first; kid; kid = OpSIBLING(kid))
-	    finalize_op(kid);
+            if (!OP_TYPE_IS(kid, OP_NULL))
+                finalize_op(kid);
     }
 }
 
@@ -8544,8 +8545,9 @@ S_cv_do_inline(pTHX_ OP *o, OP *cvop, CV *cv)
     OP *list = NULL;
     OP *arg;
     bool with_enter_leave = TRUE;
+    int args = 0;
 #ifdef DEBUGGING
-    int i = 0, args = 0;
+    int i = 0;
 #endif
     assert(o); /* the pushmark */
     assert(cv);
@@ -8609,9 +8611,13 @@ S_cv_do_inline(pTHX_ OP *o, OP *cvop, CV *cv)
         o = arg->op_next;
         list = newLISTOP(OP_LIST, 0, defav, o);
         for (; o->op_next && o->op_next->op_next != cvop; o = o->op_next) {
-            DEBUG_k(args++);
+            args++;
             o->op_flags &= ~OPf_MOD; /* warn about it? convert to call-by-ref? */
             o->op_sibling = o->op_next;
+            if (args > 8) {
+                DEBUG_k(deb("rpeep: skip inlining sub, too many args\n"));
+                return NULL;
+            }
         }
         arg = o->op_next; /* the gv */
         o->op_next = o->op_sibling = NULL; /* the last arg */
