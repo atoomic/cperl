@@ -412,6 +412,9 @@ addbits($_, 6 => qw(OPpREFCOUNTED REFC))
 addbits($_, 7 => qw(OPpLVALUE LV)) for qw(leave leaveloop);
 
 
+# Leave stack on inlined leavesub converted to a leave
+addbits('leave', 5 => qw(OPpLEAVE_SP SP));
+
 
 # Pattern coming in on the stack
 addbits($_, 6 => qw(OPpRUNTIME RTIME))
