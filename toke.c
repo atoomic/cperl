@@ -2160,10 +2160,9 @@ S_force_word(pTHX_ char *start, int token, int check_keyword, int allow_pack)
 		PL_expect = XOPERATOR;
 	    }
 	}
-	NEXTVAL_NEXTTOKE.opval
-	    = (OP*)newSVOP(OP_CONST,0,
-			   S_newSV_maybe_utf8(aTHX_ PL_tokenbuf, len));
-	NEXTVAL_NEXTTOKE.opval->op_private |= OPpCONST_BARE;
+	NEXTVAL_NEXTTOKE.opval =
+          (OP*)newSVOP(OP_CONST, OPpCONST_BARE<<8,
+                       S_newSV_maybe_utf8(aTHX_ PL_tokenbuf, len));
 	force_next(token);
     }
     return s;
@@ -2185,12 +2184,14 @@ S_force_ident(pTHX_ const char *s, int kind)
 
     if (s[0]) {
 	const STRLEN len = s[1] ? strlen(s) : 1; /* s = "\"" see yylex */
-	OP* const o = (OP*)newSVOP(OP_CONST, 0, newSVpvn_flags(s, len,
-                                                                UTF ? SVf_UTF8 : 0));
+	OP* const o = is_native_string(s, len)
+            ? newUNBOXEDOP(OP_STR_CONST, 0, (SV*)s)
+            : (OP*)newSVOP(OP_CONST, 0,
+                           newSVpvn_flags(s, len, UTF ? SVf_UTF8 : 0));
 	NEXTVAL_NEXTTOKE.opval = o;
 	force_next(WORD);
 	if (kind) {
-	    o->op_private = OPpCONST_ENTERED;
+	    o->op_private |= OPpCONST_ENTERED;
 	    /* XXX see note in pp_entereval() for why we forgo typo
 	       warnings if the symbol must be introduced in an eval.
 	       GSAR 96-10-12 */
@@ -2953,7 +2954,7 @@ S_scan_const(pTHX_ char *start)
     bool didrange = FALSE;              /* did we just finish a range? */
     bool in_charclass = FALSE;          /* within /[...]/ */
     bool has_utf8 = FALSE;              /* Output constant is UTF8 */
-    bool  this_utf8 = cBOOL(UTF);       /* Is the source string assumed to be
+    bool this_utf8 = cBOOL(UTF);        /* Is the source string assumed to be
                                            UTF8?  But, this can show as true
                                            when the source isn't utf8, as for
                                            example when it is entirely composed
@@ -4246,9 +4247,8 @@ S_intuit_method(pTHX_ char *start, SV *ioname, CV *cv)
 	    if ((PL_bufend - s) >= 2 && isFATARROW(s))
 		return 0;	/* no assumptions -- "=>" quotes bareword */
       bare_package:
-	    NEXTVAL_NEXTTOKE.opval = (OP*)newSVOP(OP_CONST, 0,
-						  S_newSV_maybe_utf8(aTHX_ tmpbuf, len));
-	    NEXTVAL_NEXTTOKE.opval->op_private = OPpCONST_BARE;
+	    NEXTVAL_NEXTTOKE.opval = (OP*)newSVOP(OP_CONST, OPpCONST_BARE<<8,
+					      S_newSV_maybe_utf8(aTHX_ tmpbuf, len));
 	    PL_expect = XTERM;
 	    force_next(WORD);
 	    PL_bufptr = s;
@@ -4882,6 +4882,7 @@ Perl_yylex(pTHX)
 	    && SvEVALED(PL_lex_repl))
 	{
 	    if (PL_bufptr != PL_bufend)
+                /* Oh my, looks like we have to keep that typo */
 		Perl_croak(aTHX_ "Bad evalled substitution pattern");
 	    PL_lex_repl = NULL;
 	}
@@ -4900,15 +4901,14 @@ Perl_yylex(pTHX)
 	    if (PL_parser->lex_shared->re_eval_str) {
 		sv = PL_parser->lex_shared->re_eval_str;
 		PL_parser->lex_shared->re_eval_str = NULL;
-		SvCUR_set(sv,
-			 PL_bufptr - PL_parser->lex_shared->re_eval_start);
+		SvCUR_set(sv, PL_bufptr - PL_parser->lex_shared->re_eval_start);
 		SvPV_shrink_to_cur(sv);
 	    }
-	    else sv = newSVpvn(PL_parser->lex_shared->re_eval_start,
+	    else {
+                sv = newSVpvn(PL_parser->lex_shared->re_eval_start,
 			 PL_bufptr - PL_parser->lex_shared->re_eval_start);
-	    NEXTVAL_NEXTTOKE.opval =
-		    (OP*)newSVOP(OP_CONST, 0,
-				 sv);
+            }
+	    NEXTVAL_NEXTTOKE.opval = (OP*)newSVOP(OP_CONST, 0, sv);
 	    force_next(THING);
 	    PL_parser->lex_shared->re_eval_start = NULL;
 	    PL_expect = XTERM;
@@ -5863,7 +5863,7 @@ Perl_yylex(pTHX)
 		if (PL_lex_stuff) {
 		    sv_catsv(sv, PL_lex_stuff);
 		    attrs = op_append_elem(OP_LIST, attrs,
-					newSVOP(OP_CONST, 0, sv));
+					   newSVOP(OP_CONST, 0, sv));
 		    SvREFCNT_dec_NN(PL_lex_stuff);
 		    PL_lex_stuff = NULL;
 		}
@@ -7001,9 +7001,8 @@ Perl_yylex(pTHX)
 	  fat_arrow:
 	    CLINE;
 	    pl_yylval.opval
-		= (OP*)newSVOP(OP_CONST, 0,
+		= (OP*)newSVOP(OP_CONST, OPpCONST_BARE<<8,
 			       S_newSV_maybe_utf8(aTHX_ PL_tokenbuf, len));
-	    pl_yylval.opval->op_private = OPpCONST_BARE;
 	    TERM(WORD);
 	}
 
@@ -7227,8 +7226,7 @@ Perl_yylex(pTHX)
 		/* if we saw a global override before, get the right name */
 
 		if (!sv)
-		  sv = S_newSV_maybe_utf8(aTHX_ PL_tokenbuf,
-						len);
+		  sv = S_newSV_maybe_utf8(aTHX_ PL_tokenbuf, len);
 		if (gvp) {
 		    SV * const tmp_sv = sv;
 		    sv = newSVpvs("CORE::GLOBAL::");
@@ -7239,19 +7237,16 @@ Perl_yylex(pTHX)
 
 		/* Presume this is going to be a bareword of some sort. */
 		CLINE;
-		pl_yylval.opval = (OP*)newSVOP(OP_CONST, 0, sv);
-		pl_yylval.opval->op_private = OPpCONST_BARE;
+		pl_yylval.opval = (OP*)newSVOP(OP_CONST, OPpCONST_BARE<<8, sv);
 
 		/* And if "Foo::", then that's what it certainly is. */
 		if (safebw)
 		    goto safe_bareword;
 
-		if (!off)
-		{
-		    OP *const_op = newSVOP(OP_CONST, 0, SvREFCNT_inc_NN(sv));
-		    const_op->op_private = OPpCONST_BARE;
-		    rv2cv_op =
-			newCVREF(OPpMAY_RETURN_CONSTANT<<8, const_op);
+		if (!off) {
+		    OP *const_op = newSVOP(OP_CONST, OPpCONST_BARE<<8,
+                                           SvREFCNT_inc_NN(sv));
+		    rv2cv_op = newCVREF(OPpMAY_RETURN_CONSTANT<<8, const_op);
 		    cv = lex
 			? isGV(gv)
 			    ? GvCV(gv)
@@ -7526,15 +7521,17 @@ Perl_yylex(pTHX)
 	    }
 
 	case KEY___FILE__:
-	    FUN0OP(
-		(OP*)newSVOP(OP_CONST, 0, newSVpv(CopFILE(PL_curcop),0))
-	    );
+#ifdef USE_ITHREADS
+            {
+                char *file = CopFILE(PL_curcop);
+                FUN0OP(newUNBOXEDOP(OP_STR_CONST, 0, (SV*)&file));
+            }
+#else
+            FUN0OP(newSVOP(OP_CONST, 0, newSVpv(CopFILE(PL_curcop),0)));
+#endif
 
 	case KEY___LINE__:
-	    FUN0OP(
-        	(OP*)newSVOP(OP_CONST, 0,
-		    Perl_newSVpvf(aTHX_ "%"IVdf, (IV)CopLINE(PL_curcop)))
-	    );
+	    FUN0OP(newUNBOXEDOP(OP_INT_CONST, 0, (SV*)&PL_curcop->cop_line));
 
 	case KEY___PACKAGE__:
 	    FUN0OP(
@@ -8906,10 +8903,8 @@ S_pending_ident(pTHX)
 		HEK * const stashname = HvNAME_HEK(stash);
 		SV *  const sym = newSVhek(stashname);
                 sv_catpvs(sym, "::");
-                sv_catpvn_flags(sym, PL_tokenbuf+1, tokenbuf_len - 1,
-                                (UTF ? SV_CATUTF8 : SV_CATBYTES ));
-                pl_yylval.opval = (OP*)newSVOP(OP_CONST, 0, sym);
-                pl_yylval.opval->op_private = OPpCONST_ENTERED;
+                sv_catpvn_flags(sym, PL_tokenbuf+1, tokenbuf_len - 1, (UTF ? SV_CATUTF8 : SV_CATBYTES ));
+                pl_yylval.opval = (OP*)newSVOP(OP_CONST, OPpCONST_ENTERED<<8, sym);
                 if (pit != '&')
                   gv_fetchsv(sym,
                     GV_ADDMULTI,
@@ -8952,11 +8947,10 @@ S_pending_ident(pTHX)
     }
 
     /* build ops for a bareword */
-    pl_yylval.opval = (OP*)newSVOP(OP_CONST, 0,
+    pl_yylval.opval = (OP*)newSVOP(OP_CONST, OPpCONST_ENTERED<<8,
 				   newSVpvn_flags(PL_tokenbuf + 1,
 						      tokenbuf_len - 1,
                                                       UTF ? SVf_UTF8 : 0 ));
-    pl_yylval.opval->op_private = OPpCONST_ENTERED;
     if (pit != '&')
 	gv_fetchpvn_flags(PL_tokenbuf+1, tokenbuf_len - 1,
 		     (PL_in_eval ? GV_ADDMULTI : GV_ADD)
@@ -10686,6 +10680,7 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 
     /* We use the first character to decide what type of number this is */
 
+    lvalp->opval = NULL;
     switch (*s) {
     default:
 	Perl_croak(aTHX_ "panic: scan_num, *s=%d", *s);
@@ -11180,21 +11175,25 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
 	 */
 
 	if (!floatit) {
-    	    UV uv;
-	    const int flags = grok_number (PL_tokenbuf, d - PL_tokenbuf, &uv);
+            union {UV uv; SV* sv;} uv;
+	    const int flags = grok_number(PL_tokenbuf, d - PL_tokenbuf, &uv.uv);
 
             if (flags == IS_NUMBER_IN_UV) {
-              if (uv <= IV_MAX)
-		sv = newSViv(uv); /* Prefer IVs over UVs. */
-              else
-	    	sv = newSVuv(uv);
+                if (uv.uv <= IV_MAX)
+                    /* Prefer IVs over UVs. */
+                    lvalp->opval = newUNBOXEDOP(OP_INT_CONST, 0, uv.sv);
+                else
+                    lvalp->opval = newUNBOXEDOP(OP_UINT_CONST, 0, uv.sv);
             } else if (flags == (IS_NUMBER_IN_UV | IS_NUMBER_NEG)) {
-              if (uv <= (UV) IV_MIN)
-                sv = newSViv(-(IV)uv);
+                if (uv.uv <= (UV) IV_MIN) {
+                    union {IV iv; SV* sv;} iv;
+                    iv.iv = -(IV)uv.uv;
+                    lvalp->opval = newUNBOXEDOP(OP_INT_CONST, 0, iv.sv);
+              }
               else
-	    	floatit = TRUE;
+                  floatit = TRUE;
             } else
-              floatit = TRUE;
+                floatit = TRUE;
         }
 	if (floatit) {
             STORE_LC_NUMERIC_UNDERLYING_SET_STANDARD();
@@ -11230,21 +11229,21 @@ Perl_scan_num(pTHX_ const char *start, YYSTYPE* lvalp)
     /* if it starts with a v, it could be a v-string */
     case 'v':
     vstring:
-		sv = newSV(5); /* preallocate storage space */
-		ENTER_with_name("scan_vstring");
-		SAVEFREESV(sv);
-		s = scan_vstring(s, PL_bufend, sv);
-		SvREFCNT_inc_simple_void_NN(sv);
-		LEAVE_with_name("scan_vstring");
+        sv = newSV(5); /* preallocate storage space */
+        ENTER_with_name("scan_vstring");
+        SAVEFREESV(sv);
+        s = scan_vstring(s, PL_bufend, sv);
+        SvREFCNT_inc_simple_void_NN(sv);
+        LEAVE_with_name("scan_vstring");
 	break;
     }
 
-    /* make the op for the constant and return */
-
-    if (sv)
-	lvalp->opval = newSVOP(OP_CONST, 0, sv);
-    else
-	lvalp->opval = NULL;
+    if (!lvalp->opval) {
+        if (sv)
+            lvalp->opval = newSVOP(OP_CONST, 0, sv);
+        else
+            lvalp->opval = NULL;
+    }
 
     return (char *)s;
 }

@@ -472,6 +472,7 @@ p	|char*	|find_script	|NN const char *scriptname|bool dosearch \
 s	|OP*	|force_list	|NULLOK OP* arg|bool nullit
 i	|OP*	|op_integerize	|NN OP *o
 i	|OP*	|op_std_init	|NN OP *o
+nMRx    |OP*    |op_pad2const   |NN OP *firstkid|NN OP *o
 i	|OP*	|newMETHOP_internal	|I32 type|I32 flags|NULLOK OP* dynamic_meth \
 					|NULLOK SV* const_meth
 : FIXME
@@ -665,6 +666,9 @@ pR	|OP*	|invert		|NULLOK OP* cmd
 ApR	|I32	|is_lvalue_sub
 : Used in cop.h
 XopR	|I32	|was_lvalue_sub
+#if defined(PERL_IN_OP_C) || defined(PERL_IN_TOKE_C)
+dMPpRx	|bool	|is_native_string |NULLOK const char* s|STRLEN len
+#endif
 #ifndef PERL_NO_INLINE_FUNCTIONS
 AiMRn	|STRLEN	|_is_utf8_char_slow|NN const U8 *s|NN const U8 *e
 #endif
@@ -694,7 +698,7 @@ ADMpPR	|bool	|isALNUM_lazy	|NN const char* p
 snR	|U8	|to_lower_latin1|const U8 c|NULLOK U8 *p|NULLOK STRLEN *lenp
 #endif
 #if defined(PERL_IN_UTF8_C) || defined(PERL_IN_REGCOMP_C) || defined(PERL_IN_REGEXEC_C)
-EXp        |UV        |_to_fold_latin1	|const U8 c|NN U8 *p|NN STRLEN *lenp \
+EXp     |UV     |_to_fold_latin1	|const U8 c|NN U8 *p|NN STRLEN *lenp \
 					|const unsigned int flags
 #endif
 #if defined(PERL_IN_UTF8_C) || defined(PERL_IN_PP_C)
@@ -1032,9 +1036,6 @@ Apda	|OP*	|newLISTOP	|I32 type|I32 flags|NULLOK OP* first|NULLOK OP* last
 AMpdan	|PADNAME *|newPADNAMEouter|NN PADNAME *outer
 AMpdan	|PADNAME *|newPADNAMEpvn|NN const char *s|STRLEN len
 AMpdan	|PADNAMELIST *|newPADNAMELIST|size_t max
-#ifdef USE_ITHREADS
-Apda	|OP*	|newPADOP	|I32 type|I32 flags|NN SV* sv
-#endif
 Apda	|OP*	|newPMOP	|I32 type|I32 flags
 Apda	|OP*	|newPVOP	|I32 type|I32 flags|NULLOK char* pv
 Apa	|SV*	|newRV		|NN SV *const sv
@@ -1058,6 +1059,8 @@ Apa	|SV*	|vnewSVpvf	|NN const char *const pat|NULLOK va_list *const args
 Apd	|SV*	|newSVrv	|NN SV *const rv|NULLOK const char *const classname
 Apda	|SV*	|newSVsv	|NULLOK SV *const old
 Apda	|SV*	|newSV_type	|const svtype type
+Apda	|OP*	|newPADOP	|I32 type|I32 flags|NN SV* sv
+Apda	|OP*	|newUNBOXEDOP	|I32 type|I32 flags|NULLOK SV* data
 Apda	|OP*	|newUNOP	|I32 type|I32 flags|NULLOK OP* first
 Apda	|OP*	|newUNOP_AUX	|I32 type|I32 flags|NULLOK OP* first \
 				|NULLOK UNOP_AUX_item *aux
@@ -1487,7 +1490,8 @@ ApdbamR	|SV*	|sv_mortalcopy	|NULLOK SV *const oldsv
 XpaR	|SV*	|sv_mortalcopy_flags|NULLOK SV *const oldsv|U32 flags
 ApdR	|SV*	|sv_newmortal
 Apd	|SV*	|sv_newref	|NULLOK SV *const sv
-Ap	|char*	|sv_peek	|NULLOK SV* sv
+ApR	|char*	|sv_peek	|NULLOK SV* sv
+ApdR	|char*	|op_native_peek	|NULLOK const OP* o
 ApdD	|void	|sv_pos_u2b	|NULLOK SV *const sv|NN I32 *const offsetp|NULLOK I32 *const lenp
 Apd	|STRLEN	|sv_pos_u2b_flags|NN SV *const sv|STRLEN uoffset \
 				|NULLOK STRLEN *const lenp|U32 flags
@@ -2012,6 +2016,7 @@ s	|void	|apply_attrs	|NN HV *stash|NN SV *target|NULLOK OP *attrs
 s	|void	|apply_attrs_my	|NN HV *stash|NN OP *target|NULLOK OP *attrs|NN OP **imopsp
 s	|void	|bad_type_pv	|I32 n|NN const char *t|NN const OP *o|NN const OP *kid
 s	|void	|bad_type_gv	|I32 n|NN GV *gv|NN const OP *kid|NN const char *t
+s	|void	|bad_type_declared|NN SV *sv|NN const char *t
 s	|void	|no_bareword_allowed|NN OP *o
 sR	|OP*	|no_fh_allowed|NN OP *o
 sR	|OP*	|too_few_arguments_pv|NN OP *o|NN const char* name|U32 flags
@@ -2464,6 +2469,11 @@ pR	|SV *	|varname	|NULLOK const GV *const gv|const char gvtype \
 				|I32 aindex|int subscript_type
 #endif
 
+#if defined(DEBUGGING) && (defined(PERL_IN_SV_C) || defined (PERL_IN_DEB_C))
+: Defined in sv.c, used in deb.c
+pPRx	|bool	|looks_like_sv|NULLOK const SV *const sv
+#endif
+
 pX	|void	|sv_del_backref	|NN SV *const tsv|NN SV *const sv
 #if defined(PERL_IN_SV_C)
 nsR	|char *	|uiv_2buf	|NN char *const buf|const IV iv|UV uv|const int is_uv \
@@ -2728,7 +2738,7 @@ Apda	|PADLIST*|pad_new	|int flags
 pnX	|void|set_padlist| NN CV * cv | NULLOK PADLIST * padlist
 #endif
 #if defined(PERL_IN_PAD_C)
-s	|PADOFFSET|pad_alloc_name|NN PADNAME *name|U32 flags \
+s	|PADOFFSET|pad_alloc_name|NN PADNAME *padname|U32 flags \
 				|NULLOK HV *typestash|NULLOK HV *ourstash
 #endif
 Apd	|PADOFFSET|pad_add_name_pvn|NN const char *namepv|STRLEN namelen\

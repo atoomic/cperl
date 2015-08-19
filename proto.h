@@ -3062,6 +3062,13 @@ PERL_CALLCONV PADNAME *	Perl_newPADNAMEpvn(const char *s, STRLEN len)
 #define PERL_ARGS_ASSERT_NEWPADNAMEPVN	\
 	assert(s)
 
+PERL_CALLCONV OP*	Perl_newPADOP(pTHX_ I32 type, I32 flags, SV* sv)
+			__attribute__malloc__
+			__attribute__warn_unused_result__
+			__attribute__nonnull__(pTHX_3);
+#define PERL_ARGS_ASSERT_NEWPADOP	\
+	assert(sv)
+
 PERL_CALLCONV OP*	Perl_newPMOP(pTHX_ I32 type, I32 flags)
 			__attribute__malloc__
 			__attribute__warn_unused_result__;
@@ -3193,6 +3200,10 @@ PERL_CALLCONV SV*	Perl_newSVuv(pTHX_ const UV u)
 			__attribute__malloc__
 			__attribute__warn_unused_result__;
 
+PERL_CALLCONV OP*	Perl_newUNBOXEDOP(pTHX_ I32 type, I32 flags, SV* data)
+			__attribute__malloc__
+			__attribute__warn_unused_result__;
+
 PERL_CALLCONV OP*	Perl_newUNOP(pTHX_ I32 type, I32 flags, OP* first)
 			__attribute__malloc__
 			__attribute__warn_unused_result__;
@@ -3320,6 +3331,9 @@ PERL_CALLCONV OP*	Perl_op_linklist(pTHX_ OP *o)
 
 /* PERL_CALLCONV OP*	op_lvalue(pTHX_ OP* o, I32 type); */
 PERL_CALLCONV OP*	Perl_op_lvalue_flags(pTHX_ OP* o, I32 type, U32 flags);
+PERL_CALLCONV char*	Perl_op_native_peek(pTHX_ const OP* o)
+			__attribute__warn_unused_result__;
+
 PERL_CALLCONV void	Perl_op_null(pTHX_ OP* o)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_OP_NULL	\
@@ -4529,7 +4543,9 @@ PERL_CALLCONV NV	Perl_sv_nv(pTHX_ SV* sv)
 #define PERL_ARGS_ASSERT_SV_NV	\
 	assert(sv)
 
-PERL_CALLCONV char*	Perl_sv_peek(pTHX_ SV* sv);
+PERL_CALLCONV char*	Perl_sv_peek(pTHX_ SV* sv)
+			__attribute__warn_unused_result__;
+
 PERL_CALLCONV void	Perl_sv_pos_b2u(pTHX_ SV *const sv, I32 *const offsetp)
 			__attribute__deprecated__
 			__attribute__nonnull__(pTHX_2);
@@ -5856,6 +5872,12 @@ PERL_CALLCONV char *	Perl__setlocale_debug_string(const int category, const char
 
 #  endif
 #endif
+#if defined(DEBUGGING) && (defined(PERL_IN_SV_C) || defined (PERL_IN_DEB_C))
+PERL_CALLCONV bool	Perl_looks_like_sv(pTHX_ const SV *const sv)
+			__attribute__warn_unused_result__
+			__attribute__pure__;
+
+#endif
 #if defined(DEBUG_LEAKING_SCALARS_FORK_DUMP)
 PERL_CALLCONV void	Perl_dump_sv_child(pTHX_ SV *sv)
 			__attribute__nonnull__(pTHX_1);
@@ -6530,6 +6552,12 @@ STATIC void	S_apply_attrs_my(pTHX_ HV *stash, OP *target, OP *attrs, OP **imopsp
 STATIC I32	S_assignment_type(pTHX_ const OP *o)
 			__attribute__warn_unused_result__;
 
+STATIC void	S_bad_type_declared(pTHX_ SV *sv, const char *t)
+			__attribute__nonnull__(pTHX_1)
+			__attribute__nonnull__(pTHX_2);
+#define PERL_ARGS_ASSERT_BAD_TYPE_DECLARED	\
+	assert(sv); assert(t)
+
 STATIC void	S_bad_type_gv(pTHX_ I32 n, GV *gv, const OP *kid, const char *t)
 			__attribute__nonnull__(pTHX_2)
 			__attribute__nonnull__(pTHX_3)
@@ -6642,6 +6670,13 @@ PERL_STATIC_INLINE OP*	S_op_integerize(pTHX_ OP *o)
 #define PERL_ARGS_ASSERT_OP_INTEGERIZE	\
 	assert(o)
 
+PERL_CALLCONV OP*	op_pad2const(OP *firstkid, OP *o)
+			__attribute__warn_unused_result__
+			__attribute__nonnull__(1)
+			__attribute__nonnull__(2);
+#define PERL_ARGS_ASSERT_OP_PAD2CONST	\
+	assert(firstkid); assert(o)
+
 PERL_STATIC_INLINE OP*	S_op_std_init(pTHX_ OP *o)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_OP_STD_INIT	\
@@ -6706,11 +6741,17 @@ PERL_CALLCONV void	Perl_report_redefined_cv(pTHX_ const SV *name, const CV *old_
 	assert(name); assert(old_cv)
 
 #endif
+#if defined(PERL_IN_OP_C) || defined(PERL_IN_TOKE_C)
+PERL_CALLCONV bool	Perl_is_native_string(pTHX_ const char* s, STRLEN len)
+			__attribute__warn_unused_result__
+			__attribute__pure__;
+
+#endif
 #if defined(PERL_IN_PAD_C)
-STATIC PADOFFSET	S_pad_alloc_name(pTHX_ PADNAME *name, U32 flags, HV *typestash, HV *ourstash)
+STATIC PADOFFSET	S_pad_alloc_name(pTHX_ PADNAME *padname, U32 flags, HV *typestash, HV *ourstash)
 			__attribute__nonnull__(pTHX_1);
 #define PERL_ARGS_ASSERT_PAD_ALLOC_NAME	\
-	assert(name)
+	assert(padname)
 
 STATIC void	S_pad_check_dup(pTHX_ PADNAME *name, U32 flags, const HV *ourstash)
 			__attribute__nonnull__(pTHX_1);
@@ -8447,13 +8488,6 @@ PERL_CALLCONV struct mro_meta*	Perl_mro_meta_dup(pTHX_ struct mro_meta* smeta, C
 			__attribute__nonnull__(pTHX_2);
 #define PERL_ARGS_ASSERT_MRO_META_DUP	\
 	assert(smeta); assert(param)
-
-PERL_CALLCONV OP*	Perl_newPADOP(pTHX_ I32 type, I32 flags, SV* sv)
-			__attribute__malloc__
-			__attribute__warn_unused_result__
-			__attribute__nonnull__(pTHX_3);
-#define PERL_ARGS_ASSERT_NEWPADOP	\
-	assert(sv)
 
 PERL_CALLCONV void	Perl_op_relocate_sv(pTHX_ SV** svp, PADOFFSET* targp)
 			__attribute__nonnull__(pTHX_1)
