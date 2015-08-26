@@ -121,6 +121,7 @@ recursive, but it's recursive on basic blocks, not on tree nodes.
 #define match_type1(sig, arg) S_match_type1(sig, arg)
 #define match_type2(sig, arg1, arg2) S_match_type2(sig, arg1, arg2)
 #define const_iv(o) S_const_iv(aTHX_ o)
+#define can_const_iv(o) S_can_const_iv(aTHX_ o)
 #define op_insert_box(o, o2) S_op_insert_box(aTHX_ o, o2)
 #define op_native_variant(o, type1) S_op_native_variant(aTHX_ o, type1)
 #define op_upgrade_native(o, c, mod) S_op_upgrade_native(aTHX_ o, c, mod)
@@ -155,10 +156,6 @@ static const char array_passed_to_stat[] =
 #define VALIDTYPE(stash) (stash && PTR2IV(stash) > 0x1000 \
                           && SvTYPE(stash) == SVt_PVHV)
 #endif
-
-#define IS_AND_OP(o)   (o->op_type == OP_AND)
-#define IS_OR_OP(o)    (o->op_type == OP_OR)
-#define IS_CONST_OP(o) (o->op_type == OP_CONST)
 
 #ifndef PERL_MAX_UNROLL_LOOP_COUNT
 #  define PERL_MAX_UNROLL_LOOP_COUNT 5
@@ -2420,6 +2417,21 @@ S_listkids(pTHX_ OP *o)
  * Returns IV_MAX on error.
  */
 
+PERL_STATIC_INLINE bool
+S_can_const_iv(pTHX_ OP* o)
+{
+    if (o->op_type == OP_INT_CONST
+        || (o->op_type == OP_CONST && SvIOK(cSVOPo_sv)))
+        return TRUE;
+    else
+        return FALSE;
+}
+
+/* The static iv value of a const op, with
+ * the special case of a native CONST_INT.
+ * Returns IV_MAX on error.
+ */
+
 PERL_STATIC_INLINE IV
 S_const_iv(pTHX_ OP* o)
 {
@@ -2464,7 +2476,7 @@ Perl_list(pTHX_ OP *o)
 	{
 	    list(cBINOPo->op_first);
 	    kid = cBINOPo->op_last;
-	    if (IS_CONST_OP(kid) && const_iv(kid) == 1) {
+	    if (can_const_iv(kid) && const_iv(kid) == 1) {
 		op_null(o); /* repeat */
 		op_null(cUNOPx(cBINOPo->op_first)->op_first);/* pushmark */
 		/* const (rhs): */
@@ -3515,12 +3527,12 @@ Perl_op_lvalue_flags(pTHX_ OP *o, I32 type, U32 flags)
 	    goto nomod;
 	else {
 	    const I32 mods = PL_modcount;
-            IV iv;
 	    modkids(cBINOPo->op_first, type);
 	    if (type != OP_AASSIGN)
 		goto nomod;
 	    kid = cBINOPo->op_last;
-	    if (IS_CONST_OP(kid) && (iv = S_const_iv(kid)) && iv != IV_MAX) {
+	    if (can_const_iv(kid)) {
+                const IV iv = const_iv(kid);
 		if (PL_modcount != RETURN_UNLIMITED_NUMBER)
 		    PL_modcount =
 			mods + (PL_modcount - mods) * (iv < 0 ? 0 : iv);
@@ -8156,7 +8168,7 @@ Perl_newFOROP(pTHX_ I32 flags, OP *sv, OP *expr, OP *block, OP *cont)
         SV *leftsv, *rightsv;
 	LISTOP* listop;
 
-        if (IS_CONST_OP(left) && IS_CONST_OP(right)
+        if (can_const_iv(left) && can_const_iv(right)
             && SvIOK(leftsv = cSVOPx_sv(left))
             && SvIOK(rightsv = cSVOPx_sv(right)))
         {
@@ -14690,7 +14702,7 @@ S_maybe_multideref(pTHX_ OP *start, OP *orig_o, UV orig_action, U8 hints)
                     else {
                         /* it's a constant array index */
                         const IV iv = const_iv(o);
-                        if (iv == IV_MAX)
+                        if (!can_const_iv(o))
                             break;
 
                         if (   action_count == 0
@@ -15190,20 +15202,18 @@ S_mderef_uoob_gvsv(pTHX_ OP* o, SV* idx)
 STATIC bool
 S_peep_leaveloop(pTHX_ OP* leave, OP* from, OP* to)
 {
-    SV *fromsv, *tosv;
     IV maxto = 0;
 
-    if (IS_CONST_OP(from) && IS_CONST_OP(to)
-        && SvIOK(fromsv = cSVOPx_sv(from)) && SvIOK(tosv = cSVOPx_sv(to)))
-    {
+    if (can_const_iv(from) && can_const_iv(to)) {
+        IV from_iv = const_iv(from);
+        /* Check all aelem if can aelem_u */
+        maxto = const_iv(to);
         /* Unrolling is easier in newFOROP? */
-        if (SvIV(tosv)-SvIV(fromsv) <= PERL_MAX_UNROLL_LOOP_COUNT) {
+        if (maxto-from_iv <= PERL_MAX_UNROLL_LOOP_COUNT) {
             DEBUG_kv(Perl_deb(aTHX_ "rpeep: possibly unroll loop (%"IVdf"..%"IVdf")\n",
-                              SvIV(fromsv), SvIV(tosv)));
+                              from_iv, maxto));
             /* TODO op_clone_oplist from feature/gh23-inline-subs */
         }
-        /* 2. Check all aelem if can aelem_u */
-        maxto = SvIV(tosv);
     }
 
     /* for (0..$#a) { ... $a[$_] ...} */
@@ -16208,7 +16218,7 @@ Perl_rpeep(pTHX_ OP *o)
                  4   const[0]
                convert repeat into a stub with no kids.
              */
-            if (IS_CONST_OP(o->op_next)
+            if (can_const_iv(o->op_next)
              || (  o->op_next->op_type == OP_PADSV
                 && !(o->op_next->op_private & OPpLVAL_INTRO))
              || (  o->op_next->op_type == OP_GV
@@ -16221,12 +16231,12 @@ Perl_rpeep(pTHX_ OP *o)
                    kid = kid->op_next;
                 /* kid is now the ex-list.  */
                 if (kid->op_type == OP_NULL
-                 && IS_CONST_OP((kid = kid->op_next))
+                 && can_const_iv((kid = kid->op_next))
                     /* kid is now the repeat count.  */
                  && kid->op_next->op_type == OP_REPEAT
                  && kid->op_next->op_private & OPpREPEAT_DOLIST
                  && (kid->op_next->op_flags & OPf_WANT) == OPf_WANT_LIST
-                    && S_const_iv((OP*)kid) == 0)
+                    && const_iv((OP*)kid) == 0)
                 {
                     o = kid->op_next; /* repeat */
                     assert(oldop);
@@ -16318,7 +16328,7 @@ Perl_rpeep(pTHX_ OP *o)
                  * instead */
                 if (   p->op_type == OP_PADAV
                     && p->op_next
-                    && IS_CONST_OP(p->op_next)
+                    && can_const_iv(p->op_next)
                     && p->op_next->op_next
                     && p->op_next->op_next->op_type == OP_AELEM
                 )
@@ -16512,7 +16522,7 @@ Perl_rpeep(pTHX_ OP *o)
 		OP* const pop = (o->op_type == OP_PADAV)
                                  ? o->op_next : o->op_next->op_next;
 		IV i;
-		if (pop && IS_CONST_OP(pop) &&
+		if (pop && can_const_iv(pop) &&
 		    ((PL_op = pop->op_next)) &&
 		    pop->op_next->op_type == OP_AELEM &&
 		    !(pop->op_next->op_private &
