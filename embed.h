@@ -1655,6 +1655,9 @@
 #define too_few_arguments_pv(a,b,c)	S_too_few_arguments_pv(aTHX_ a,b,c)
 #define too_many_arguments_pv(a,b,c)	S_too_many_arguments_pv(aTHX_ a,b,c)
 #  endif
+#  if defined(PERL_IN_OP_C) || defined(PERL_IN_PP_HOT_C)
+#define op_native_padsv(a)	Perl_op_native_padsv(aTHX_ a)
+#  endif
 #  if defined(PERL_IN_OP_C) || defined(PERL_IN_SV_C)
 #define report_redefined_cv(a,b,c)	Perl_report_redefined_cv(aTHX_ a,b,c)
 #  endif
