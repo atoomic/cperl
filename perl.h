@@ -28,6 +28,9 @@
 #   include "config.h"
 #endif
 
+#define PERL_FAKE_SIGNATURES
+#define PERL_NATIVE_TYPES
+
 /* NOTE 1: that with gcc -std=c89 the __STDC_VERSION__ is *not* defined
  * because the __STDC_VERSION__ became a thing only with C90.  Therefore,
  * with gcc, HAS_C99 will never become true as long as we use -std=c89.
