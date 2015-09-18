@@ -1,4 +1,4 @@
-/*    miniperlmain.c
+/*    perlmain.c
  *
  *    Copyright (C) 1994, 1995, 1996, 1997, 1999, 2000, 2001, 2002, 2003,
  *    2004, 2005, 2006, 2007, by Larry Wall and others
@@ -16,13 +16,8 @@
  *     [Frodo on p.73 of _The Lord of the Rings_, I/iii: "Three Is Company"]
  */
 
-/* This file contains the main() function for the perl interpreter.
- * Note that miniperlmain.c contains main() for the 'miniperl' binary,
- * while perlmain.c contains main() for the 'perl' binary.
- *
- * Miniperl is like perl except that it does not support dynamic loading,
- * and in fact is used to build the dynamic modules needed for the 'real'
- * perl executable.
+/* This file contains the main() function for the perl interpreter,
+   and xs_init() to boot the static extensions.
  */
 
 #ifdef OEMVS
@@ -168,10 +163,13 @@ static void
 xs_init(pTHX)
 {
     static const char file[] = __FILE__;
+    dSP;
+    CV *cv;
     dXSUB_SYS;
     PERL_UNUSED_CONTEXT;
 
     /* DynaLoader is a special case */
-    newXS("DynaLoader::boot_DynaLoader", boot_DynaLoader, file);
-    boot_DynaLoader(aTHX_ get_cv("DynaLoader::boot_DynaLoader", 0));
+    cv = newXS("DynaLoader::boot_DynaLoader", boot_DynaLoader, file);
+    PUSHMARK(SP);
+    boot_DynaLoader(aTHX_ cv);
 }
