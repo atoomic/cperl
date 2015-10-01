@@ -4238,11 +4238,13 @@ ext/VMS-Stdio/Makefile.PL	MakeMaker driver for VMS::Stdio
 ext/VMS-Stdio/Stdio.pm		VMS options to stdio routines
 ext/VMS-Stdio/Stdio.xs		VMS options to stdio routines
 ext/VMS-Stdio/t/vms_stdio.t	regression tests for VMS::Stdio
+ext/warnings/Dummy.c		XS warnings empty C file
+ext/warnings/Makefile.PL	XS warnings extension makefile writer
 ext/warnings/register.pm	warnings::register extension
 ext/warnings/warnings.boot	miniperl compatible warnings for bootstrap only
 ext/warnings/warnings.pm	warnings extension
 ext/warnings/warnings.t		Test warnings
-ext/warnings/warnings.xs	Generated warnings.xs hash
+ext/warnings/warnings.xs	Pre-generated warnings.xs hash
 ext/warnings/warnings_xs.in	gperf template for warnings.xs
 ext/warnings/warnings_xs.PL	Generate warnings_xs.in, warnings.xs and warnings.h
 ext/Win32CORE/Makefile.PL	Win32CORE extension

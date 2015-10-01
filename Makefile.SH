@@ -936,7 +936,7 @@ $(LIBPERL): $& $(perllib_objs) $(DYNALOADER) $(LIBPERLEXPORT)
 #    (so that lib/buildcustomize.pl is always available. This simplifies things)
 # b) have the rest of the Makefile depend on the more obvious $(MINIPERL_EXE)
 
-$(MINIPERL_EXE): lib/buildcustomize.pl warnings_boot
+$(MINIPERL_EXE): lib/buildcustomize.pl mini_boot
 
 !NO!SUBS!
 
@@ -1134,7 +1134,7 @@ esac
 $spitshell >>$Makefile <<'!NO!SUBS!'
 
 .PHONY: preplibrary
-preplibrary: $(MINIPERL_EXE) $(CONFIGPM) $(PREPLIBRARY_LIBPERL) warnings_boot
+preplibrary: $(MINIPERL_EXE) $(CONFIGPM) $(PREPLIBRARY_LIBPERL) mini_boot
 
 $(CONFIGPM_FROM_CONFIG_SH): $(CONFIGPOD)
 
@@ -1306,8 +1306,8 @@ CHMOD_W = chmod +w
 #	embed.pl:	proto.h embed.h embedvar.h perlapi.h perlapi.c
 #	opcode.pl:	opcode.h opnames.h pp_proto.h
 #	regcomp.pl:	regnodes.h
-#	ext/warnings/warnings_xs.PL:	warnings.h ext/warnings/warnings.xs
 #	feature.pl:	feature.h lib/feature.pm
+#	ext/warnings/warnings_xs.PL:	warnings.h ext/warnings/warnings.xs
 #       ext/Config/Config_xs.PL: ext/Config/Config_xs.out ext/Config/Config.xs
 # The correct versions should be already supplied with the perl kit,
 # in case you don't have perl available.
@@ -1375,10 +1375,12 @@ lib/warnings/register.pm : ext/warnings/register.pm
 	$(CPS) ext/warnings/register.pm lib/warnings/
 
 lib/warnings.pm : ext/warnings/warnings.pm FORCE
+	echo xs perl warnings
 	$(RMS) $@
 	$(CPS) ext/warnings/warnings.pm $@
 
 warnings_boot : lib/warnings/register.pm FORCE
+	echo miniperl warnings
 	$(RMS) lib/warnings.pm
 	$(CPS) ext/warnings/warnings.boot lib/warnings.pm
 
@@ -1393,33 +1395,6 @@ s_dummy $(static_ext):  preplibrary makeppport $(DYNALOADER) FORCE
 n_dummy $(nonxs_ext):	preplibrary FORCE
 	$(MINIPERL) make_ext.pl $@ $(MAKE_EXT_ARGS) MAKE="$(MAKE)" LIBPERL_A=$(LIBPERL)
 !NO!SUBS!
-
-case $static_ext in
-    *warnings*) ;;
-    *)
-        $spitshell >>$Makefile <<'EOF'
-
-# defer this to make regen
-ext/warnings/warnings.xs : ext/warnings/warnings_xs.PL ext/warnings/warnings_xs.in \
-			   $(MINIPERL_EXE) warnings_boot lib/buildcustomize.pl
-	$(MINIPERL) ext/warnings/warnings_xs.PL
-
-ext/warnings/warnings.c : ext/warnings/warnings.xs preplibrary dist/ExtUtils-ParseXS/pm_to_blib
-	cd ext/warnings && $(LDLIBPTH) ../../$(MINIPERL_EXE) -I../../lib ../../lib/ExtUtils/xsubpp -noprototypes \
-		-typemap ../../lib/ExtUtils/typemap warnings.xs > warnings.c
-ext/warnings/warnings.i : ext/warnings/warnings.c $(h)
-	@echo `$(CCCMDSRC)` -I. -E ext/warnings/warnings.c \> $@
-	@`$(CCCMDSRC)` -I. -E ext/warnings/warnings.c > $@
-ext/warnings/warnings$(OBJ_EXT) : ext/warnings/warnings.c $(h)
-	`$(CCCMD)` $(LDDLFLAGS) $(CCCDLFLAGS) -I. ext/warnings/warnings.c -o $@
-lib/auto/warnings/warnings$(DLSUFFIX) : ext/warnings/warnings$(OBJ_EXT) $(LIBPERL)
-	mkdir -p lib/auto/warnings
-	$(LD) -o $@ $(LDDLFLAGS) ext/warnings/warnings$(OBJ_EXT)
-	$(MAKE) warnings_post
-
-EOF
-        ;;
-esac
 
 $spitshell >>$Makefile <<EOF
 $extra_dep
@@ -1618,7 +1593,7 @@ _test:
 
 # Architecture-neutral stuff:
 
-test_prep_pre: preplibrary utilities $(nonxs_ext)
+test_prep_pre: preplibrary utilities $(nonxs_ext) mini_post
 !NO!SUBS!
 
 case "$targethost" in
