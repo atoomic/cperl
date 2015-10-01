@@ -30,8 +30,8 @@ our %feature_bundle = (
     "5.10"    => [qw(array_base say state switch)],
     "5.11"    => [qw(array_base say state switch unicode_strings)],
     "5.15"    => [qw(current_sub evalbytes fc say state switch unicode_eval unicode_strings)],
-    "5.21"    => [qw(current_sub evalbytes fc say shaped_arrays state switch unicode_eval unicode_strings)],
-    "5.23"    => [qw(current_sub evalbytes fc postderef_qq say shaped_arrays state switch unicode_eval unicode_strings)],
+    "5.21"    => [qw(current_sub evalbytes fc lexical_subs say shaped_arrays state switch unicode_eval unicode_strings)],
+    "5.23"    => [qw(current_sub evalbytes fc lexical_subs postderef_qq say shaped_arrays state switch unicode_eval unicode_strings)],
     "all"     => [qw(array_base bitwise current_sub evalbytes fc lexical_subs postderef postderef_qq refaliasing say shaped_arrays signatures state switch unicode_eval unicode_strings)],
     "default" => [qw(array_base)],
 );
@@ -49,6 +49,8 @@ $feature_bundle{"5.24"} = $feature_bundle{"5.23"};
 $feature_bundle{"5.25"} = $feature_bundle{"5.23"};
 $feature_bundle{"5.26"} = $feature_bundle{"5.23"};
 $feature_bundle{"5.9.5"} = $feature_bundle{"5.10"};
+my %experimental = (
+);
 
 our $hint_shift   = 26;
 our $hint_mask    = 0x1c000000;
@@ -419,11 +421,11 @@ The following feature bundles are available:
 
   :5.22     say state switch unicode_strings
             unicode_eval evalbytes current_sub fc
-            shaped_arrays
+            shaped_arrays lexical_subs
 
   :5.24     say state switch unicode_strings
             unicode_eval evalbytes current_sub fc
-            shaped_arrays postderef_qq
+            shaped_arrays lexical_subs postderef_qq
 
   :5.26     say state switch unicode_strings
             unicode_eval evalbytes current_sub fc

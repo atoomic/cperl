@@ -59,9 +59,9 @@ my %feature_bundle = (
     "5.19"   =>	[qw(say state switch unicode_strings unicode_eval
 		    evalbytes current_sub fc)],
     "5.21"   =>	[qw(say state switch unicode_strings unicode_eval
-		    evalbytes current_sub fc shaped_arrays)],
+		    evalbytes current_sub fc shaped_arrays lexical_subs)],
     "5.23"   =>	[qw(say state switch unicode_strings unicode_eval
-		    evalbytes current_sub fc shaped_arrays
+		    evalbytes current_sub fc shaped_arrays lexical_subs
                     postderef_qq)],
     "5.25"   =>	[qw(say state switch unicode_strings unicode_eval
 		    evalbytes current_sub fc shaped_arrays
@@ -69,8 +69,7 @@ my %feature_bundle = (
 );
 
 # not actually used currently
-my @experimental = qw( lexical_subs );
-
+my @experimental; # = qw( lexical_subs );
 
 ###########################################################################
 # More data generated from the above
@@ -192,9 +191,9 @@ for (sort keys %Aliases) {
 	qq'\$feature_bundle{"$_"} = \$feature_bundle{"$Aliases{$_}"};\n';
 };
 
-#print $pm "my \%experimental = (\n";
-#print $pm "    $_ => 1,\n", for @experimental;
-#print $pm ");\n";
+print $pm "my \%experimental = (\n";
+print $pm "    $_ => 1,\n", for @experimental;
+print $pm ");\n";
 
 print $pm <<EOPM;
 
