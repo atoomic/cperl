@@ -1939,7 +1939,7 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 		int count = maxnest - nest;
 		for (i=0; i <= HvMAX(hv); i++) {
 		    for (he = HvARRAY(hv)[i]; he; he = HeNEXT(he)) {
-			U32 hash;
+			/*U32 hash;*/
 			SV * keysv;
 			const char * keypv;
 			SV * elt;
@@ -1947,7 +1947,7 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 
 			if (count-- <= 0) goto DONEHV;
 
-			hash = HeHASH(he);
+			/*hash = HeHASH(he);*/
 			keysv = hv_iterkeysv(he);
 			keypv = SvPV_const(keysv, len);
 			elt = HeVAL(he);
@@ -1957,7 +1957,7 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
                             PerlIO_printf(file, "[UTF8 \"%s\"] ", sv_uni_display(d, keysv, 6 * SvCUR(keysv), UNI_DISPLAY_QQ));
 			if (HvEITER_get(hv) == he)
 			    PerlIO_printf(file, "[CURRENT] ");
-                        PerlIO_printf(file, "HASH = 0x%"UVxf"\n", (UV) hash);
+                        /*PerlIO_printf(file, "HASH = 0x%"UVxf"\n", (UV) hash);*/
                         do_sv_dump(level+1, file, elt, nest+1, maxnest, dumpops, pvlim);
                     }
 		}

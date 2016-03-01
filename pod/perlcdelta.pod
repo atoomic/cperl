@@ -70,6 +70,13 @@ Added new C<get_svs>, C<get_avs>, C<get_hvs> macros, and accompanied
 C<get_[ash]vn_flags> API functions, to omit the run-time C<strlen(name)>
 for constant names. (#191)
 
+=item *
+
+Hash keys don't store the calculated hash anymore. Thus this macro is
+now undefined: C<HEK_HASH(hek)>, and thos macros return now C<0>:
+C<HeHASH(he)>, C<SvSHARED_HASH(sv)>. See [cperl #34].
+C<HEK_HASH_calc(hek)> can be used to calculate the hash value from a HEK.
+
 =back
 
 =head1 Modules and Pragmata

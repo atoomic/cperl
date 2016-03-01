@@ -51,12 +51,11 @@ struct he {
 
 /* hash key -- defined separately for use as shared pointer */
 struct hek {
-    U32		hek_hash;	/* hash of key */
     I32		hek_len;	/* length of hash key */
     char	hek_key[1];	/* variable-length hash key */
     /* the hash-key is \0-terminated */
     /* after the \0 there is a byte for flags, such as whether the key
-       is UTF-8 */
+       is UTF-8. See HVhek_* */
 };
 
 struct shared_he {
@@ -210,7 +209,9 @@ to.
 
 
 =for apidoc Am|U32|HeHASH|HE* he
-Returns the computed hash stored in the hash entry.
+Invalid. The computed hash is not stored in the hash entry anymore.
+Within PERL_CORE a call to HeHASH will assert, outside PERL_CORE C<0>
+is returned. To compute the hash use C<HeHASH_calc(he)>.
 
 =for apidoc Am|char*|HePV|HE* he|STRLEN len
 
@@ -405,8 +406,12 @@ C<SV*>.
 #define HeKLEN_UTF8(he)  	(HeKUTF8(he) ? -HeKLEN(he) : HeKLEN(he))
 #define HeKFLAGS(he)  		HEK_FLAGS(HeKEY_hek(he))
 #define HeVAL(he)		(he)->he_valu.hent_val
+#ifdef PERL_CORE
 #define HeHASH(he)		HEK_HASH(HeKEY_hek(he))
-/* Here we require a STRLEN lp */
+#else
+#define HeHASH(he)		0
+#endif
+#define HeHASH_calc(he)		HEK_HASH_calc(HeKEY_hek(he))
 #define HePV(he,lp)		((HeKLEN(he) == HEf_SVKEY) ?		\
 				 SvPV(HeKEY_sv(he),lp) :                \
 				 ((lp = HeKLEN(he)), HeKEY(he)))
@@ -429,7 +434,12 @@ C<SV*>.
 #  define Nullhek Null(HEK*)
 #endif
 #define HEK_BASESIZE		STRUCT_OFFSET(HEK, hek_key[0])
-#define HEK_HASH(hek)		(hek)->hek_hash
+/* This is gone. You can compute it with he _calc macros, but is mostly
+   not needed. */
+#ifdef PERL_CORE
+#define HEK_HASH(hek)		assert(0 && "no HEK_HASH")
+#endif
+#define HEK_HASH_calc(hek)	PERL_HASH(hash,HEK_KEY(hek),HEK_LEN(hek))
 #define HEK_LEN(hek)		(hek)->hek_len
 #define HEK_KEY(hek)		(hek)->hek_key
 #define HEK_FLAGS(hek)	(*((unsigned char *)(HEK_KEY(hek))+HEK_LEN(hek)+1))
@@ -542,17 +552,17 @@ C<SV*>.
 #ifdef PERL_CORE
 # define hv_storehek(hv, hek, val) \
     hv_common((hv), NULL, HEK_KEY(hek), HEK_LEN(hek), HEK_UTF8(hek),	\
-	      HV_FETCH_ISSTORE|HV_FETCH_JUST_SV, (val), HEK_HASH(hek))
+	      HV_FETCH_ISSTORE|HV_FETCH_JUST_SV, (val), 0)
 # define hv_fetchhek(hv, hek, lval) \
     ((SV **)								\
      hv_common((hv), NULL, HEK_KEY(hek), HEK_LEN(hek), HEK_UTF8(hek),	\
 	       (lval)							\
 		? (HV_FETCH_JUST_SV | HV_FETCH_LVALUE)			\
 		: HV_FETCH_JUST_SV,					\
-	       NULL, HEK_HASH(hek)))
+	       NULL, 0))
 # define hv_deletehek(hv, hek, discard) \
     hv_common((hv), NULL, HEK_KEY(hek), HEK_LEN(hek), HEK_UTF8(hek), \
-	      (discard)|HV_DELETE, NULL, HEK_HASH(hek))
+	      (discard)|HV_DELETE, NULL, 0)
 #endif
 
 /* This refcounted he structure is used for storing the hints used for lexical
@@ -575,7 +585,7 @@ struct refcounted_he;
 struct refcounted_he {
     struct refcounted_he *refcounted_he_next;	/* next entry in chain */
 #ifdef USE_ITHREADS
-    U32                   refcounted_he_hash;
+    /*U32                   refcounted_he_hash;*/
     U32                   refcounted_he_keylen;
 #else
     HEK                  *refcounted_he_hek;	/* hint key */

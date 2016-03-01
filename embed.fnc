@@ -577,6 +577,7 @@ AbmdR	|bool	|hv_exists_ent	|NULLOK HV *hv|NN SV *keysv|U32 hash
 Abmd	|SV**	|hv_fetch	|NULLOK HV *hv|NN const char *key|I32 klen \
 				|I32 lval
 Abmd	|HE*	|hv_fetch_ent	|NULLOK HV *hv|NN SV *keysv|I32 lval|U32 hash
+: hash calculated
 Ap	|void*	|hv_common	|NULLOK HV *hv|NULLOK SV *keysv \
 				|NULLOK const char* key|I32 klen|int flags \
 				|int action|NULLOK SV *val|U32 hash
@@ -1966,9 +1967,11 @@ s	|void	|hsplit		|NN HV *hv|U32 const oldsize|U32 newsize
 s	|void	|hfreeentries	|NN HV *hv
 s	|SV*	|hv_free_ent_ret|NN HV *hv|NN HE *entry
 sa	|HE*	|new_he
+: hash ignored
 sanR	|HEK*	|save_hek_flags	|NN const char *str|I32 len|U32 hash|int flags
 sn	|void	|hv_magic_check	|NN HV *hv|NN bool *needs_copy|NN bool *needs_store
 s	|void	|unshare_hek_or_pvn|NULLOK const HEK* hek|NULLOK const char* str|I32 len|U32 hash
+: hash mandatory
 sR	|HEK*	|share_hek_flags|NN const char *str|I32 len|U32 hash|int flags
 rs	|void	|hv_notallowed	|int flags|NN const char *key|I32 klen|NN const char *msg
 #if defined(PERL_HASH_RANDOMIZE_KEYS)

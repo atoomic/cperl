@@ -2327,6 +2327,15 @@ HeVAL(he)
 U32
 HeHASH(he)
 	B::HE he
+    PREINIT:
+	U32 hash = 0;
+        HEK *hek;
+    CODE:
+        hek = HeKEY_hek(he);
+        PERL_HASH(hash, HEK_KEY(hek), HEK_LEN(hek));
+	RETVAL = hash;
+    OUTPUT:
+        RETVAL
 
 U32
 HeSTATIC(he)
