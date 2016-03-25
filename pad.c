@@ -2376,7 +2376,8 @@ Perl_cv_name(pTHX_ CV *cv, SV *sv, U32 flags)
 	    }
 	    else if (CvLEXICAL(cv) || flags & CV_NAME_NOTQUAL)
 		sv_sethek(retsv, GvNAME_HEK(GvEGV(CvGV(cv))));
-	    else gv_efullname4(retsv, CvGV(cv), NULL, !(flags & CV_NAME_NOMAIN));
+	    else if (CvGV(cv))
+                gv_efullname4(retsv, CvGV(cv), NULL, !(flags & CV_NAME_NOMAIN));
 	}
 	else if (flags & CV_NAME_NOTQUAL) sv_sethek(retsv, GvNAME_HEK(cv));
 	else gv_efullname4(retsv,(GV *)cv, NULL, !(flags & CV_NAME_NOMAIN));
