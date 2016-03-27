@@ -70,6 +70,12 @@ Added new C<get_svs>, C<get_avs>, C<get_hvs> macros, and accompanied
 C<get_[ash]vn_flags> API functions, to omit the run-time C<strlen(name)>
 for constant names. (#191)
 
+=item *
+
+Changed hash iterators. Iterating over a hash may now by default not change
+any key. Allow the previous destructive behavior of changing a hash while
+iterating over it with C<use hashiter;> (#117)
+
 =back
 
 =head1 Modules and Pragmata
