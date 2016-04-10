@@ -1486,7 +1486,12 @@ useposix,		T_INV,0,ALN64I"@@useposix@@"
 usequadmath,		T_INV,0,ALN64I"@@usequadmath@@"
 usereentrant,		T_INV,0,ALN64I"@@usereentrant@@"
 userelocatableinc,	T_INV,0,ALN64I"@@userelocatableinc@@"
+<<<<<<< 2914d99f10410a84a7b5bdf96d41b7251c5e5c60
 usesfio,		T_INV,0,ALN64I"@@usesfio@@"
+||||||| merged common ancestors
+=======
+usesafehashiter,	T_INV,0,ALN64I"@@usesafehashiter@@"
+>>>>>>> add Config{usesafehashiter} and USE_SAFE_HASHITER
 useshrplib,		T_INV,0,ALN64I"@@useshrplib@@"
 usesitecustomize,	T_INV,0,ALN64I"@@usesitecustomize@@"
 usesocks,		T_INV,0,ALN64I"@@usesocks@@"

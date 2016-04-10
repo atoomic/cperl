@@ -5333,7 +5333,16 @@
  *	This symbol, if defined, indicates that Perl is the cperl variant.
  */
 #ifndef USE_CPERL
-/*#define	USE_CPERL		/ **/
+#define	USE_CPERL		/**/
+#endif
+
+/* USE_SAFE_HASHITER:
+ *	This symbol, if defined, indicates that Perl disallows changes of
+ *      hash keys during iteration. You need to permit it with use hashiter,
+ *      or set the key "unsafe_hashiter" in the current cop hints hash.
+ */
+#ifndef USE_SAFE_HASHITER
+#define	USE_SAFE_HASHITER		/**/
 #endif
 
 /* PERL_HASH_FUNC_*:
@@ -5347,6 +5356,6 @@
 #endif
 
 /* Generated from:
- * 52a72cf19e9185a68544a313038eca8fa7ceabb9fc921365bc375b9a17d8d259 config_h.SH
- * 1fc71bb792275b1dfe746662581487d3a5c2cb024cd4ca15e7f2d181a4004145 uconfig.sh
+ * a887531b5002eec4e01d8d475153cea8b899b5963dab834235bf3dcc5b02a494 config_h.SH
+ * 4c622ce34bb57203d9a9a4e2629ce2cfd19e50237e2ee457039ada711f307e40 uconfig.sh
  * ex: set ro: */
