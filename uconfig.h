@@ -5341,7 +5341,7 @@
  */
 #define PERL_EXACT_ARITH
 #ifndef USE_EXACT_ARITH
-#	USE_EXACT_ARITH		/**/
+/*#define	USE_EXACT_ARITH		/ **/
 #endif
 
 /* PERL_HASH_FUNC_*:
@@ -5356,5 +5356,5 @@
 
 /* Generated from:
  * a3326c0bec39836b203c08ccbe6b3a5859b73eb0b9b18b35233c8c2ebe8819f9 config_h.SH
- * 1fc71bb792275b1dfe746662581487d3a5c2cb024cd4ca15e7f2d181a4004145 uconfig.sh
+ * 066d9b04edc72f0f5e64fcaac5917fa64bab25e491d331fce5111eb6763477f9 uconfig.sh
  * ex: set ro: */
