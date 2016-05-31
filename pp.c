@@ -1291,6 +1291,11 @@ PP(pp_pow)
             if (iv >= 0) {
                 power = iv;
             } else {
+#ifdef PERL_EXACT_ARITH
+                if (UNLIKELY(IS_EXACT_ARITH))
+                    bigint_arith("bpow", svl, svr);
+                else
+#endif
                 goto float_pow; /* Can't do negative powers this way.  */
             }
         }
@@ -1331,8 +1336,18 @@ PP(pp_pow)
                     result *= base;
             }
             SP--;
-            SETn( result );
-            SvIV_please_void_nomg(svr);
+            if (result < UV_MAX_P1) {
+                SETn( result );
+                SvIV_please_void_nomg(svr);
+            }
+#ifdef PERL_EXACT_ARITH
+            else if (UNLIKELY(IS_EXACT_ARITH)) {
+                bigint_arith("bpow", svl, svr);
+                RETURN;
+            }
+#endif
+            else
+                SETn( result );
             RETURN;
         } else {
             unsigned int highbit = 8 * sizeof(UV);
@@ -1367,8 +1382,13 @@ PP(pp_pow)
                     /* 2's complement assumption: special case IV_MIN */
                     SETi( IV_MIN );
                 else
-                    /* answer negative, doesn't fit */
-                    SETn( -(NV)result );
+#ifdef PERL_EXACT_ARITH
+                    if (UNLIKELY(IS_EXACT_ARITH))
+                        bigint_arith("bpow", svl, svr);
+                    else
+#endif
+                        /* answer negative, doesn't fit */
+                        SETn( -(NV)result );
                 RETURN;
             } 
         }
@@ -1488,8 +1508,14 @@ PP(pp_multiply)
                 /* nothing was lost by converting to IVs */
                 goto do_iv;
             SP--;
-            /* TODO: check exact arith pragma and nv overflow/precision loss
+            /* check exact arith pragma and nv overflow/precision loss
                and promote to bignum */
+#ifdef PERL_EXACT_ARITH
+            if (UNLIKELY(IS_EXACT_ARITH)) {
+                bigint_arith("bmul", svl, svr);
+                RETURN;
+            }
+#endif
             result = nl * nr;
 #  if defined(__sgi) && defined(USE_LONG_DOUBLE) && LONG_DOUBLEKIND == LONG_DOUBLE_IS_DOUBLEDOUBLE_128_BIT_BIG_ENDIAN && NVSIZE == 16
             if (Perl_isinf(result)) {
@@ -1526,6 +1552,12 @@ PP(pp_multiply)
 		const UV auv = both_neg ? (UV)(-aiv) : (UV)aiv;
 		const UV buv = both_neg ? (UV)(-biv) : (UV)biv;
                 if (BUILTIN_UMUL_OVERFLOW(auv, buv, &result)) {
+#ifdef PERL_EXACT_ARITH
+                    if (UNLIKELY(IS_EXACT_ARITH)) {
+                        bigint_arith("bmul", svl, svr);
+                        RETURN;
+                    } else
+#endif
                     SETn( (NV)auv * (NV)buv );
                 } else {
                     if ((auvok & buvok) || result > IV_MAX)
@@ -1538,6 +1570,12 @@ PP(pp_multiply)
             } else {
                 IV value;
                 if (BUILTIN_SMUL_OVERFLOW(aiv, biv, &value)) {
+#ifdef PERL_EXACT_ARITH
+                    if (UNLIKELY(IS_EXACT_ARITH)) {
+                        bigint_arith("bmul", svl, svr);
+                        RETURN;
+                    } else
+#endif
                     SETn( (NV)aiv * (NV)biv );
                 } else {
                     SETi( value );
@@ -1671,6 +1709,53 @@ PP(pp_multiply)
     }
 }
 
+/*
+=for apidoc AMp|void|bigint_arith
+
+Does a binary arithmetic op via bigint and string eval,
+when requested via use exact_arith.
+
+Slow but exact.
+
+=cut
+*/
+
+void
+Perl_bigint_arith(pTHX_ const char *op, SV* const left, SV* const right) {
+    dSP;
+    SV* sv;
+    PERL_ARGS_ASSERT_BIGINT_ARITH;
+
+    PUSHSTACKi(PERLSI_REQUIRE);
+    sv = Perl_newSVpvf(aTHX_ "require Math::BigInt; Math::BigInt->%s(", op);
+    if (SvIOK(left)) {
+        if (SvUOK(left))
+            sv_catpvf(aTHX_ sv, "%"UVuf"", SvUVX(left));
+        else
+            sv_catpvf(aTHX_ sv, "%"IVdf"", SvIVX(left));
+    } else {
+	STORE_LC_NUMERIC_UNDERLYING_SET_STANDARD();
+	/* full precision, not just %g. TODO long double */
+	sv_catpvf(aTHX_ sv, "%.15g, ", SvNVX(left));
+	RESTORE_LC_NUMERIC_UNDERLYING();
+    }
+    if (SvIOK(right)) {
+        if (SvUOK(right))
+            sv_catpvf(aTHX_ sv, ", %"UVuf");", SvUVX(right));
+        else
+            sv_catpvf(aTHX_ sv, ", %"IVdf");", SvIVX(right));
+    } else if (SvNOK(right)) {
+	STORE_LC_NUMERIC_UNDERLYING_SET_STANDARD();
+	sv_catpvf(aTHX_ sv, ", %.15g);", SvNVX(right));
+	RESTORE_LC_NUMERIC_UNDERLYING();
+    } else {
+	sv_catpvf(aTHX_ sv, ");");
+    }
+    eval_sv(sv_2mortal(sv), G_SCALAR);
+    POPSTACK;
+    PUTBACK;
+}
+
 PP(pp_divide)
 {
     dSP; dATARGET; SV *svl, *svr;
@@ -1768,6 +1853,12 @@ PP(pp_divide)
                 if (result <= (UV)IV_MIN)
                     SETi(result == (UV)IV_MIN ? IV_MIN : -(IV)result);
                 else {
+#ifdef PERL_EXACT_ARITH
+                    if (UNLIKELY(IS_EXACT_ARITH)) {
+                        bigint_arith("bdiv", svl, svr);
+                        RETURN;
+                    } else
+#endif
                     /* It's exact but too negative for IV. */
                     SETn( -(NV)result );
                 }
@@ -2213,6 +2304,11 @@ PP(pp_subtract)
                         SETi(result == (UV)IV_MIN
                                 ? IV_MIN : -(IV)result);
 		    else {
+#ifdef PERL_EXACT_ARITH
+                        if (UNLIKELY(IS_EXACT_ARITH)) {
+                            bigint_arith("bsub", svl, svr);
+                        } else
+#endif
 			/* result valid, but out of range for IV.  */
 			SETn( -(NV)result );
 		    }
@@ -3496,6 +3592,11 @@ PPt(pp_int, "(:Numeric):Int")
 	      if (value < (NV)UV_MAX + 0.5) {
 		  SETu(U_V(value));
 	      } else {
+#ifdef PERL_EXACT_ARITH
+                  if (UNLIKELY(IS_EXACT_ARITH)) {
+                      bigint_arith("bfloor", sv, &PL_sv_undef);
+                  } else
+#endif
 		  SETn(Perl_floor(value));
 	      }
 	  }
@@ -3503,6 +3604,11 @@ PPt(pp_int, "(:Numeric):Int")
 	      if (value > (NV)IV_MIN - 0.5) {
 		  SETi(I_V(value));
 	      } else {
+#ifdef PERL_EXACT_ARITH
+                  if (UNLIKELY(IS_EXACT_ARITH)) {
+                      bigint_arith("bceil", sv, &PL_sv_undef);
+                  } else
+#endif
 		  SETn(Perl_ceil(value));
 	      }
 	  }

@@ -362,6 +362,14 @@ There we only need the 2 UTF8 bits: HVhek_UTF8 and HVhek_WASUTF8,
 but not the 3 others: UNSHARED, TAINTED, STATIC. (the 2 last being
 cperl-only)
 
+=item *
+
+Added B<exact_arith> pragma
+
+Promote on overflow to bigint/num as in perl6, do not loose precision
+with all builtin arithmetic operators.
+L<[cperl #21]|https://github.com/perl11/cperl/issues/21>
+
 =back
 
 =head1 Selected Bug Fixes

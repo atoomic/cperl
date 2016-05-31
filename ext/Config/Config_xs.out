@@ -1525,6 +1525,7 @@ struct stringpool_t
     char stringpool_str4585[sizeof ("cryptlib")];
     char stringpool_str4601[sizeof ("usevfork")];
     char stringpool_str4611[sizeof ("direntrytype")];
+    char stringpool_str4630[sizeof ("useexactarith")];
     char stringpool_str4648[sizeof ("usequadmath")];
     char stringpool_str4658[sizeof ("i_sysstatvfs")];
     char stringpool_str4666[sizeof ("use64bitint")];
@@ -2794,6 +2795,7 @@ static const struct stringpool_t stringpool_contents =
     "cryptlib",
     "usevfork",
     "direntrytype",
+    "useexactarith",
     "usequadmath",
     "i_sysstatvfs",
     "use64bitint",
@@ -6159,8 +6161,10 @@ Config_lookup (register const char *str, register unsigned int len)
       {(U16)(long)&((struct stringpool_t *)0)->stringpool_str4611,		T_INV,0,ALN64I"@@direntrytype@@"},
       {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO},
       {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO},
+
+      {(U16)(long)&((struct stringpool_t *)0)->stringpool_str4630,		T_INV,0,ALN64I"@@useexactarith@@"},
       {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO},
-      {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO},
+      {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO},
 
       {(U16)(long)&((struct stringpool_t *)0)->stringpool_str4648,		T_INV,0,ALN64I"@@usequadmath@@"},
       {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO}, {XSCNO},

@@ -5336,6 +5336,14 @@
 /*#define	USE_CPERL		/ **/
 #endif
 
+/* USE_EXACT_ARITH:
+ *	This symbol, if defined, indicates that Perl uses exact_arith as default.
+ */
+#define PERL_EXACT_ARITH
+#ifndef USE_EXACT_ARITH
+#	USE_EXACT_ARITH		/**/
+#endif
+
 /* PERL_HASH_FUNC_*:
  *	This symbol defines the used perl hash function variant.
  *      It is set in Configure or via -Dhash_func=, but can be left blank.
@@ -5347,6 +5355,6 @@
 #endif
 
 /* Generated from:
- * 52a72cf19e9185a68544a313038eca8fa7ceabb9fc921365bc375b9a17d8d259 config_h.SH
+ * a3326c0bec39836b203c08ccbe6b3a5859b73eb0b9b18b35233c8c2ebe8819f9 config_h.SH
  * 1fc71bb792275b1dfe746662581487d3a5c2cb024cd4ca15e7f2d181a4004145 uconfig.sh
  * ex: set ro: */
