@@ -121,6 +121,7 @@ my $tree = {
         'missing'       => [ 5.021, DEFAULT_OFF],
         'redundant'     => [ 5.021, DEFAULT_OFF],
         'locale'        => [ 5.021, DEFAULT_ON],
+        'types'         => [ 5.024, DEFAULT_OFF],
 
          #'default'     => [ 5.008, DEFAULT_ON ],
 }]};
