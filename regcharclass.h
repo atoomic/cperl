@@ -1852,7 +1852,7 @@
 #endif /* H_REGCHARCLASS */
 
 /* Generated from:
- * cb3170dd603ad12ba0299440e99e8f50a8afde60ade2ffcbf1ff4a8a53854b90 lib/Unicode/UCD.pm
+ * 2fb3f3abdf021f0367143007a59fb0a91d35401adf2bce703989ceccadfb11c1 lib/Unicode/UCD.pm
  * ae98bec7e4f0564758eed81eca5015481ba32581f8a735a825b71b3bba714450 lib/unicore/ArabicShaping.txt
  * 1687fe5994eb7e5c0dab8503fc2a1b3b479d91af9d3b8055941c9bd791f7d0b5 lib/unicore/BidiBrackets.txt
  * 350d1302116194b0b21def287434b55c5088098fbc726e879f7420a391965643 lib/unicore/BidiMirroring.txt
@@ -1895,7 +1895,7 @@
  * 1a0687fb9c6c4567e853913549df0944fe40821279a3e9cdaa6ab8679bc286fd lib/unicore/extracted/DLineBreak.txt
  * 40bcfed3ca727c19e1331f6c33806231d5f7eeeabd2e6a9e06a3740c85d0c250 lib/unicore/extracted/DNumType.txt
  * a18d502bad39d527ac5586d7bc93e29f565859e3bcc24ada627eff606d6f5fed lib/unicore/extracted/DNumValues.txt
- * e1cc3b9b51d4fc706c9faf4dae0d40d9212aa772f7355f58e01e3df1f08a0af8 lib/unicore/mktables
+ * ca16aacb7142f8bc236a3cb1304538547fee2652bc084514e8d93a65d659bd7a lib/unicore/mktables
  * 462c9aaa608fb2014cd9649af1c5c009485c60b9c8b15b89401fdc10cf6161c6 lib/unicore/version
  * 913d2f93f3cb6cdf1664db888bf840bc4eb074eef824e082fceda24a9445e60c regen/charset_translations.pl
  * 4363898821f8e95890b54154b7434b960174bc56fce9e017ae1bb0acf1d1b0ce regen/regcharclass.pl
