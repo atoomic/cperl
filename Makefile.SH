@@ -393,8 +393,7 @@ $make_set_make
 
 # disabled for now until properly integrated
 case "${unexec}" in
-    #unex*) archobjs="$archobjs ${unexec}${_o}" ;;
-    *) ;;
+    unex*) archobjs="$archobjs ${unexec}${_o}" ;;
 esac
 
 case "${osname}" in
@@ -539,9 +538,9 @@ main_only_objs = op$(OBJ_EXT)     perl$(OBJ_EXT)
 miniperl_objs_nodt = $(mini_only_objs) $(common_objs) miniperlmain$(OBJ_EXT)
 perllib_objs_nodt  = $(main_only_objs) $(common_objs)
 
-miniperl_objs = $(miniperl_objs_nodt) $(DTRACE_MINI_O)
+miniperl_objs = $(miniperl_objs_nodt) $(DTRACE_MINI_O) lastfile$(OBJ_EXT)
 perllib_objs  = $(perllib_objs_nodt) $(DTRACE_PERLLIB_O)
-perlmain_objs = perlmain$(OBJ_EXT) $(DTRACE_MAIN_O)
+perlmain_objs = perlmain$(OBJ_EXT) $(DTRACE_MAIN_O) lastfile$(OBJ_EXT)
 
 perltoc_pod_prereqs = extra.pods pod/perl5240delta.pod pod/perl5251cdelta.pod pod/perlapi.pod pod/perlintern.pod pod/perlmodlib.pod pod/perluniprops.pod
 generated_pods = pod/perltoc.pod $(perltoc_pod_prereqs)

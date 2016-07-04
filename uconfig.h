@@ -5344,9 +5344,14 @@
 #define	PERL_HASH_FUNC_FNV1A	/**/
 #endif
 
+/* UNEXEC:
+ *	This symbol defines the used unexec source.
+ *      Defined via ccflags.
+ */
+
 #endif
 
 /* Generated from:
- * 52a72cf19e9185a68544a313038eca8fa7ceabb9fc921365bc375b9a17d8d259 config_h.SH
+ * 60aaed15bd01bd015c066a14eb74c20c3c429596f0df1f50ef4d65c632562b16 config_h.SH
  * 1fc71bb792275b1dfe746662581487d3a5c2cb024cd4ca15e7f2d181a4004145 uconfig.sh
  * ex: set ro: */
