@@ -5344,6 +5344,17 @@
 #define	PERL_HASH_FUNC_FNV1A	/**/
 #endif
 
+/* EXE_EXT:
+ *	This symbol is either ".exe" on dosish system, ".pm" on Stratus VOS or undefined.
+ */
+#ifndef EXE_EXT
+#if  defined(__HAIKU__) || defined(__VOS__) || defined(__CYGWIN__)
+  || defined(DOSISH) || defined(OS2) || defined(WIN32) || defined(DJGPP)
+  || defined(__SYMBIAN32__)
+#define	EXE_EXT ""	/**/
+#endif
+#endif
+
 /* UNEXEC:
  *	This symbol defines the used unexec source.
  *      Defined via ccflags.
@@ -5352,6 +5363,6 @@
 #endif
 
 /* Generated from:
- * 60aaed15bd01bd015c066a14eb74c20c3c429596f0df1f50ef4d65c632562b16 config_h.SH
- * 1fc71bb792275b1dfe746662581487d3a5c2cb024cd4ca15e7f2d181a4004145 uconfig.sh
+ * 557104cc2b58c9e786669acebbd42e477d7a41f5fe12ac9fa898e3342ff94a01 config_h.SH
+ * f237864574a49ffe497ea5754d9e22801cef651524a7788feb86534116492e7f uconfig.sh
  * ex: set ro: */
