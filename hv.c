@@ -534,6 +534,35 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 	}
     }
 
+    masked_flags = (flags & HVhek_MASK);
+
+    /* cache optimization: with not many keys, avoid hash
+       and just do a linear search. The last entry must be a sentinel NULL */
+    if (XHvSMALL(xhv)) {
+        entry = NULL;
+        assert(!(keysv && SvIsCOW_shared_hash(keysv) && HvSHAREKEYS(hv)));
+        for (oentry = &(HvARRAY(hv))[0]; *oentry; oentry++) {
+            DEBUG_H(linear++);
+            /*if (!HeKEY_hek(entry))
+              continue;*/
+            /*if (HeHASH(entry) != hash)
+                continue;*/
+            if (HeKLEN(*oentry) != klen)
+                continue;
+            if (memNE(HeKEY(*oentry),key,klen))	/* is this it? */
+                continue;
+            if ((HeKFLAGS(*oentry) ^ masked_flags) & HVhek_UTF8)
+                continue;
+            entry = *oentry;
+            DEBUG_H(PerlIO_printf(Perl_debug_log, "HASH found small %s{%s}\n",
+                             HvNAME_get(hv)?HvNAME_get(hv):"", key));
+            goto found;
+        }
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "HASH not found small %s{%s}\n",
+                         HvNAME_get(hv)?HvNAME_get(hv):"", key));
+        goto not_found;
+    }
+
     if (keysv && (SvIsCOW_shared_hash(keysv))) {
         if (HvSHAREKEYS(hv)) {
             keysv_hek  = SvSHARED_HEK_FROM_PV(SvPVX_const(keysv));
@@ -551,8 +580,6 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     }
     else if (!hash)
         PERL_HASH(hash, key, klen);
-
-    masked_flags = (flags & HVhek_MASK);
 
 #ifdef DYNAMIC_ENV_FETCH
     if (!HvARRAY(hv)) {
@@ -680,7 +707,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         /* move found bucket to the front
            oe -> e -> A           => e -> oe -> A
            oe -> A .. X -> e -> B => e -> oe -> A .. X -> B */
-        if (!HvEITER_get(hv) && entry != *oentry) {
+        if (!HvEITER_get(hv) && entry != *oentry && !XHvSMALL(xhv)) {
             if (HeNEXT(*oentry) == entry) {
                 DEBUG_H(PerlIO_printf(Perl_debug_log, "HASH move up 1\t%s{%s}\n",
                                       HvNAME_get(hv)?HvNAME_get(hv):"", key));
@@ -800,7 +827,8 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 #endif
 
 #ifndef PERL_PERTURB_KEYS_TOP
-    oentry = &HvARRAY(hv)[ HvHASH_INDEX(hash, xhv->xhv_max) ];
+    if (!XHvSMALL(xhv))
+        oentry = &HvARRAY(hv)[ HvHASH_INDEX(hash, xhv->xhv_max) ];
 #endif
 
 #if INTSIZE > 4
@@ -826,6 +854,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     else                                       /* gotta do the real thing */
 	HeKEY_hek(entry) = save_hek_flags(key, klen, hash, flags);
     HeVAL(entry) = val;
+    /*if (xhv->xhv_keys <= PERL_HV_SMALL_MAX) {
+        *(entry+1) = NULL;
+    }*/
 
     if (!*oentry && SvOOK(hv)) {
         /* initial entry, and aux struct present.  */
@@ -859,7 +890,14 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     {   /* Insert at the top which gives us the best performance */
         DEBUG_H(PerlIO_printf(Perl_debug_log, "HASH insert top\t%s{%.*s}\n",
                               HvNAME_get(hv)?HvNAME_get(hv):"", (int)klen, key));
-        HeNEXT(entry) = *oentry; /* oe -> n:   e -> oe -> n */
+        if (!XHvSMALL(xhv))
+            HeNEXT(entry) = *oentry; /* oe -> n:   e -> oe -> n */
+        else
+#if 1
+            assert(!HeNEXT(entry));
+#else
+            HeNEXT(entry) = NULL;
+#endif
         *oentry = entry;
     }
 #ifdef DEBUGGING
@@ -893,7 +931,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 	HvHASKFLAGS_on(hv);
 
     xhv->xhv_keys++;
-    if ( DO_HSPLIT(xhv) ) {
+    if ( (XHvSMALL(xhv) && xhv->xhv_keys == PERL_HV_SMALL_MAX)
+         || DO_HSPLIT(xhv) )
+    {
         const U32 oldsize = xhv->xhv_max + 1;
         const U32 items = HvPLACEHOLDERS_get(hv);
         DEBUG_H(PerlIO_printf(Perl_debug_log,
@@ -912,10 +952,26 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
                putting in all the placeholders (first) before turning on the
                readonly flag, because Storable always pre-splits the hash.
                If we're lucky, then we may clear sufficient placeholders to
-               avoid needing to split the hash at all.  */
-            clear_placeholders(hv, items);
-            if (DO_HSPLIT(xhv))
-                hsplit(hv, oldsize, (U32)(oldsize * 2));
+               avoid needing to split the hash at all. */
+            if ( xhv->xhv_keys == PERL_HV_SMALL_MAX ) {
+                U32 i;
+                /* avoid split/leaving small hash, put into placeholder slot */
+                for (i = 0; i <= PERL_HV_SMALL_MAX; i++) {
+                    HE **oentry = &(HvARRAY(hv)[i]);
+                    if (HeVAL(*oentry) == &PL_sv_placeholder) {
+                        DEBUG_H(PerlIO_printf(Perl_debug_log,
+                                    "HASH replace placeholder %s{%s} [%ld]\n",
+                                    HvNAME_get(hv)?HvNAME_get(hv):"", key, (long)i));
+                        *oentry = entry;
+                        HvPLACEHOLDERS(hv)--;
+                        break;
+                    }
+                }
+            } else {
+                clear_placeholders(hv, items);
+                if (DO_HSPLIT(xhv))
+                    hsplit(hv, oldsize, (U32)(oldsize * 2));
+            }
         } else {
             hsplit(hv, oldsize, (U32)(oldsize * 2));
         }
@@ -1313,6 +1369,35 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         HvHASKFLAGS_on(MUTABLE_SV(hv));
     }
 
+    masked_flags = (k_flags & HVhek_MASK);
+
+    /* cache optimization: with not many keys, avoid hash
+       and just do a linear search. It cannot be a shared hash, keysv_hek */
+    if (XHvSMALL(xhv)) {
+        entry = NULL;
+        assert(!(keysv && SvIsCOW_shared_hash(keysv) && HvSHAREKEYS(hv)));
+        for (oentry = &(HvARRAY(hv))[0]; *oentry; oentry++) {
+            DEBUG_H(linear++);
+            /*if (!HeKEY_hek(entry))
+              continue;*/
+            /*if (HeHASH(entry) != hash)
+                continue;*/
+            if (HeKLEN(*oentry) != klen)
+                continue;
+            if (memNE(HeKEY(*oentry),key,klen))	/* is this it? */
+                continue;
+            if ((HeKFLAGS(*oentry) ^ masked_flags) & HVhek_UTF8)
+                continue;
+            entry = *oentry;
+            DEBUG_H(PerlIO_printf(Perl_debug_log, "HASH found small %s{%s}\n",
+                             HvNAME_get(hv)?HvNAME_get(hv):"", key));
+            goto found;
+        }
+        DEBUG_H(PerlIO_printf(Perl_debug_log, "HASH not found small %s{%s}\n",
+                         HvNAME_get(hv)?HvNAME_get(hv):"", key));
+        goto not_found;
+    }
+
     if (keysv && (SvIsCOW_shared_hash(keysv))) {
         if (HvSHAREKEYS(hv)) {
             keysv_hek = SvSHARED_HEK_FROM_PV(SvPVX_const(keysv));
@@ -1576,7 +1661,6 @@ S_hsplit(pTHX_ HV *hv, U32 const oldsize, U32 newsize)
     U32 i = 0;
     char *a = (char*) HvARRAY(hv);
     HE **aep;
-
     bool do_aux= (
         /* already have an HvAUX(hv) so we have to move it */
         SvOOK(hv) ||
@@ -1588,12 +1672,14 @@ S_hsplit(pTHX_ HV *hv, U32 const oldsize, U32 newsize)
 
     PERL_ARGS_ASSERT_HSPLIT;
 
-    PL_nomemok = TRUE;
-    Renew(a, PERL_HV_ARRAY_ALLOC_BYTES(newsize)
-          + (do_aux ? sizeof(struct xpvhv_aux) : 0), char);
-    PL_nomemok = FALSE;
-    if (!a) {
-      return;
+    if (oldsize > 8) {
+        PL_nomemok = TRUE;
+        Renew(a, PERL_HV_ARRAY_ALLOC_BYTES(newsize)
+              + (do_aux ? sizeof(struct xpvhv_aux) : 0), char);
+        PL_nomemok = FALSE;
+        if (!a)
+            return;
+        HvARRAY(hv) = (HE**) a;
     }
 
 #ifdef PERL_HASH_RANDOMIZE_KEYS
@@ -1608,12 +1694,10 @@ S_hsplit(pTHX_ HV *hv, U32 const oldsize, U32 newsize)
         PL_hash_rand_bits = ROTL_UV(PL_hash_rand_bits,1);
     }
 #endif
-    HvARRAY(hv) = (HE**) a;
-    HvMAX(hv) = newsize - 1;
     /* before we zero the newly added memory, we
      * need to deal with the aux struct that may be there
      * or have been allocated by us*/
-    if (do_aux) {
+    if (do_aux && oldsize > 8) {
         struct xpvhv_aux *const dest
             = (struct xpvhv_aux*) &a[newsize * sizeof(HE*)];
         if (SvOOK(hv)) {
@@ -1641,14 +1725,67 @@ S_hsplit(pTHX_ HV *hv, U32 const oldsize, U32 newsize)
             SvOOK_on(hv);
         }
     }
-    /* now we can safely clear the second half */
-    Zero(&a[oldsize * sizeof(HE*)], (newsize-oldsize) * sizeof(HE*), char);	/* zero 2nd half*/
 
-    if (!HvTOTALKEYS(hv))       /* skip rest if no entries */
+    if (!HvTOTALKEYS(hv)) {       /* skip rest if no entries */
+        if (oldsize <= 8) {       /* need to resize at least */
+            int n = PERL_HV_ARRAY_ALLOC_BYTES(newsize)
+                + (do_aux ? sizeof(struct xpvhv_aux) : 0);
+            PL_nomemok = TRUE;
+            Renew(a, n, char);
+            Zero(a, n, char);
+            PL_nomemok = FALSE;
+            HvARRAY(hv) = (HE**) a;
+            HvMAX(hv) = newsize - 1;
+        }
         return;
+    }
 
-    newsize--;
     aep = (HE**)a;
+    if (oldsize <= 8) {
+        HE **newa;
+        char *newap;
+        Newxz(newap, PERL_HV_ARRAY_ALLOC_BYTES(newsize)
+              + (do_aux ? sizeof(struct xpvhv_aux) : 0), char);
+        newa = (HE**)newap;
+        if (do_aux) {
+            struct xpvhv_aux *const dest = (struct xpvhv_aux*) &newa[newsize];
+            if (SvOOK(hv)) {
+                Move(&a[oldsize * sizeof(HE*)], dest, 1, struct xpvhv_aux);
+                dest->xhv_fill_lazy = 0;
+#ifdef PERL_HASH_RANDOMIZE_KEYS
+                dest->xhv_rand = (U32)PL_hash_rand_bits;
+#endif
+            } else {
+#ifdef PERL_HASH_RANDOMIZE_KEYS
+                dest->xhv_rand = (U32)PL_hash_rand_bits;
+#endif
+                (void)hv_auxinit_internal(dest);
+                SvOOK_on(hv);
+            }
+        }
+        newsize--;
+        for (; *aep; aep++) {
+            HE **entry;
+            const char const *key = (const char const*)HeKEY(*aep);
+            const I32 klen = HeKLEN(*aep);
+            U32 hash;
+            PERL_HASH(hash, key, klen);
+            HeHASH(*aep) = hash; /* the old hek had no hash */
+            entry = &newa[hash & newsize];
+            if (*entry) { /* insert at top */
+                HeNEXT(*aep) = HeNEXT(*entry);
+            }
+            *entry = *aep;
+        }
+        HvARRAY(hv) = newa;
+        HvMAX(hv) = newsize;
+        return;
+    }
+
+    /* now we can safely clear the second half */
+    Zero(&a[oldsize * sizeof(HE*)], (newsize-oldsize) * sizeof(HE*), char);
+    newsize--;
+    HvMAX(hv) = newsize;
     do {
 	HE **oentry = aep + i;
 	HE *entry = aep[i];
@@ -1761,7 +1898,7 @@ Perl_newHVhv(pTHX_ HV *ohv)
 	const bool shared = !!HvSHAREKEYS(ohv);
 	HE **ents, ** const oents = (HE **)HvARRAY(ohv);
 	char *a;
-	Newx(a, PERL_HV_ARRAY_ALLOC_BYTES(hv_max+1), char);
+	Newxz(a, PERL_HV_ARRAY_ALLOC_BYTES(hv_max+1), char);
 	ents = (HE**)a;
 
 	/* In each bucket... */
