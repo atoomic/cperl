@@ -387,14 +387,14 @@ barestmt:	PLUGSTMT
 	|	WHILE '(' remember texpr ')' mintro mblock cont
 			{
 			  $$ = block_end($3,
-				  newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+				  newWHILEOP(0, 1, (LOOP*)NULL,
 				      $4, $7, $8, $6));
 			  parser->copline = (line_t)$1;
 			}
 	|	UNTIL '(' remember iexpr ')' mintro mblock cont
 			{
 			  $$ = block_end($3,
-				  newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+				  newWHILEOP(0, 1, (LOOP*)NULL,
 				      $4, $7, $8, $6));
 			  parser->copline = (line_t)$1;
 			}
@@ -406,7 +406,7 @@ barestmt:	PLUGSTMT
 		mblock
 			{
 			  OP *initop = $4;
-			  OP *forop = newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+			  OP *forop = newWHILEOP(0, 1, (LOOP*)NULL,
 				      scalar($7), $13, $11, $10);
 			  if (initop) {
 			      forop = op_prepend_elem(OP_LINESEQ, initop,
@@ -461,7 +461,7 @@ barestmt:	PLUGSTMT
 	|	block cont
 			{
 			  /* a block is a loop that happens once */
-			  $$ = newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+			  $$ = newWHILEOP(0, 1, (LOOP*)NULL,
 				  (OP*)NULL, $1, $2, 0);
 			}
 	|	PACKAGE WORD WORD '{' remember
@@ -474,7 +474,7 @@ barestmt:	PLUGSTMT
 		stmtseq '}'
 			{
 			  /* a block is a loop that happens once */
-			  $$ = newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+			  $$ = newWHILEOP(0, 1, (LOOP*)NULL,
 				  (OP*)NULL, block_end($5, $7), (OP*)NULL, 0);
 			  if (parser->copline > (line_t)$4)
 			      parser->copline = (line_t)$4;

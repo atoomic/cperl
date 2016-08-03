@@ -411,7 +411,7 @@ case 2:
 #line 388 "perly.y" /* yacc.c:1646  */
     {
 			  (yyval.opval) = block_end((ps[-5].val.ival),
-				  newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+				  newWHILEOP(0, 1, (LOOP*)NULL,
 				      (ps[-4].val.opval), (ps[-1].val.opval), (ps[0].val.opval), (ps[-2].val.ival)));
 			  parser->copline = (line_t)(ps[-7].val.ival);
 			}
@@ -422,7 +422,7 @@ case 2:
 #line 395 "perly.y" /* yacc.c:1646  */
     {
 			  (yyval.opval) = block_end((ps[-5].val.ival),
-				  newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+				  newWHILEOP(0, 1, (LOOP*)NULL,
 				      (ps[-4].val.opval), (ps[-1].val.opval), (ps[0].val.opval), (ps[-2].val.ival)));
 			  parser->copline = (line_t)(ps[-7].val.ival);
 			}
@@ -445,7 +445,7 @@ case 2:
 #line 407 "perly.y" /* yacc.c:1646  */
     {
 			  OP *initop = (ps[-9].val.opval);
-			  OP *forop = newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+			  OP *forop = newWHILEOP(0, 1, (LOOP*)NULL,
 				      scalar((ps[-6].val.opval)), (ps[0].val.opval), (ps[-2].val.opval), (ps[-3].val.ival));
 			  if (initop) {
 			      forop = op_prepend_elem(OP_LINESEQ, initop,
@@ -528,7 +528,7 @@ case 2:
 #line 462 "perly.y" /* yacc.c:1646  */
     {
 			  /* a block is a loop that happens once */
-			  (yyval.opval) = newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+			  (yyval.opval) = newWHILEOP(0, 1, (LOOP*)NULL,
 				  (OP*)NULL, (ps[-1].val.opval), (ps[0].val.opval), 0);
 			}
 
@@ -549,7 +549,7 @@ case 2:
 #line 475 "perly.y" /* yacc.c:1646  */
     {
 			  /* a block is a loop that happens once */
-			  (yyval.opval) = newWHILEOP(0, 1, (LOOP*)(OP*)NULL,
+			  (yyval.opval) = newWHILEOP(0, 1, (LOOP*)NULL,
 				  (OP*)NULL, block_end((ps[-3].val.ival), (ps[-1].val.opval)), (OP*)NULL, 0);
 			  if (parser->copline > (line_t)(ps[-4].val.ival))
 			      parser->copline = (line_t)(ps[-4].val.ival);
@@ -1824,6 +1824,6 @@ case 2:
     
 
 /* Generated from:
- * 9c77b1ceb0faa062220e0fa85d52b9add30763197807b93388c3ce6115e48dc7 perly.y
+ * aaf810ef2b43a13d118777dd71c10694ee33ccb25f2b3f3fa3e864d7d73bac1d perly.y
  * d75acf04e5e050e9d0de13999b5b46a13f176dcf9f75c07acf51e913fc41db9a regen_perly.pl
  * ex: set ro: */

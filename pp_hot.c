@@ -2759,11 +2759,8 @@ PP(pp_iter_lazyiv)
 
     /* Note: no reverse support. (9..0) */
     cur = cx->blk_loop.state_u.lazyiv.cur;
-    if (UNLIKELY(cur > cx->blk_loop.state_u.lazyiv.end)) {
-        assert(PL_stack_sp < PL_stack_max);
-        *++PL_stack_sp = &PL_sv_no;
-        return PL_op->op_next;
-    }
+    if (UNLIKELY(cur > cx->blk_loop.state_u.lazyiv.end))
+        return NORMAL;
 
     oldsv = *itersvp;
     if (oldsv && LIKELY(SvREFCNT(oldsv) == 1 && !SvMAGICAL(oldsv))) {
@@ -2797,11 +2794,7 @@ PP(pp_iter_lazyiv)
     } else
         ++cx->blk_loop.state_u.lazyiv.cur;
 
-    /* pp_enteriter should have pre-extended the stack */
-    assert(PL_stack_sp < PL_stack_max);
-    *++PL_stack_sp = &PL_sv_yes;
-
-    return PL_op->op_next;
+    return cUNOP->op_first;
 }
 
 PP(pp_iter_ary)
@@ -2824,11 +2817,7 @@ PP(pp_iter_ary)
     if (UNLIKELY(inc > 0
                  ? ix > AvFILL(av)
                  : ix < 0))
-    {
-        assert(PL_stack_sp < PL_stack_max);
-        *++PL_stack_sp = &PL_sv_no;
-        return PL_op->op_next;
-    }
+        return NORMAL;
 
     if (UNLIKELY(SvRMAGICAL(av))) {
         SV * const * const svp = av_fetch(av, ix, FALSE);
@@ -2840,7 +2829,7 @@ PP(pp_iter_ary)
 
     if (UNLIKELY(cx->cx_type & CXp_FOR_LVREF)) {
         SvSetMagicSV(*itersvp, sv);
-        goto retyes;
+        return cUNOP->op_first;
     }
 
     if (LIKELY(sv)) {
@@ -2873,11 +2862,7 @@ PP(pp_iter_ary)
 #endif
         SvREFCNT_dec(oldsv);
 
- retyes:
-    assert(PL_stack_sp < PL_stack_max);
-    *++PL_stack_sp = &PL_sv_yes;
-
-    return PL_op->op_next;
+    return cUNOP->op_first;
 }
 
 PP(pp_iter)
@@ -2885,8 +2870,9 @@ PP(pp_iter)
     PERL_CONTEXT *cx;
     SV *oldsv;
     SV **itersvp;
+#if 0
     SV *retsv;
-
+#endif
     SV *sv;
     AV *av;
     IV ix;
@@ -2907,7 +2893,7 @@ PP(pp_iter)
         STRLEN maxlen = 0;
         const char *max = SvPV_const(end, maxlen);
         if (UNLIKELY(SvNIOK(cur) || SvCUR(cur) > maxlen))
-            goto retno;
+            return NORMAL;
 
         oldsv = *itersvp;
         /* NB: on the first iteration, oldsv will have a ref count of at
@@ -2939,7 +2925,7 @@ PP(pp_iter)
         IV cur = cx->blk_loop.state_u.lazyiv.cur;
         assert(0 && "pp_iter_lazyiv instead");
 	if (UNLIKELY(cur > cx->blk_loop.state_u.lazyiv.end))
-	    goto retno;
+            return NORMAL;
 
         oldsv = *itersvp;
 	/* see NB comment above */
@@ -2988,7 +2974,7 @@ PP(pp_iter)
                         ? ix > cx->blk_oldsp
                         : ix <= cx->blk_loop.state_u.stack.basesp)
         )
-            goto retno;
+            return NORMAL;
 
         sv = PL_stack_base[ix];
         av = NULL;
@@ -3005,7 +2991,7 @@ PP(pp_iter)
                         ? ix > AvFILL(av)
                         : ix < 0)
         )
-            goto retno;
+            return NORMAL;
 
         if (UNLIKELY(SvRMAGICAL(av))) {
             SV * const * const svp = av_fetch(av, ix, FALSE);
@@ -3057,6 +3043,7 @@ PP(pp_iter)
 	DIE(aTHX_ "panic: pp_iter, type=%u", CxTYPE(cx));
     }
 
+#if 0
     retsv = &PL_sv_yes;
     if (0) {
       retno:
@@ -3064,9 +3051,11 @@ PP(pp_iter)
     }
     /* pp_enteriter should have pre-extended the stack */
     assert(PL_stack_sp < PL_stack_max);
-    *++PL_stack_sp =retsv;
-
-    return PL_op->op_next;
+    *++PL_stack_sp = retsv;
+#endif
+    /* iter is always followed by OP_AND which consumes this stack yes|no entry. 
+       here inlined. iter is now a UNOP, this being the continue case. */
+    return cUNOP->op_first;
 }
 
 /*
