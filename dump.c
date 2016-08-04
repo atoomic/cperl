@@ -1005,25 +1005,25 @@ Perl_do_op_dump(pTHX_ I32 level, PerlIO *file, const OP *o)
 	if (CopLINE(cCOPo))
 	    Perl_dump_indent(aTHX_ level, file, "LINE = %"UVuf"\n",
 			     (UV)CopLINE(cCOPo));
-    if (CopSTASHPV(cCOPo)) {
-        SV* tmpsv = newSVpvs_flags("", SVs_TEMP);
-        HV *stash = CopSTASH(cCOPo);
-        const char * const hvname = HvNAME_get(stash);
+        if (CopSTASHPV(cCOPo)) {
+            SV* tmpsv = newSVpvs_flags("", SVs_TEMP);
+            HV *stash = CopSTASH(cCOPo);
+            const char * const hvname = HvNAME_get(stash);
         
 	    Perl_dump_indent(aTHX_ level, file, "PACKAGE = \"%s\"\n",
                            generic_pv_escape(tmpsv, hvname,
                               HvNAMELEN(stash), HvNAMEUTF8(stash)));
-    }
-  if (CopLABEL(cCOPo)) {
-       SV* tmpsv = newSVpvs_flags("", SVs_TEMP);
-       STRLEN label_len;
-       U32 label_flags;
-       const char *label = CopLABEL_len_flags(cCOPo,
-                                                &label_len, &label_flags);
-       Perl_dump_indent(aTHX_ level, file, "LABEL = \"%s\"\n",
+        }
+        if (CopLABEL(cCOPo)) {
+            SV* tmpsv = newSVpvs_flags("", SVs_TEMP);
+            STRLEN label_len;
+            U32 label_flags;
+            const char *label = CopLABEL_len_flags(cCOPo,
+                                    &label_len, &label_flags);
+            Perl_dump_indent(aTHX_ level, file, "LABEL = \"%s\"\n",
                            generic_pv_escape( tmpsv, label, label_len,
                                       (label_flags & SVf_UTF8)));
-   }
+        }
         Perl_dump_indent(aTHX_ level, file, "SEQ = %u\n",
                          (unsigned int)cCOPo->cop_seq);
 	break;
@@ -1050,6 +1050,9 @@ Perl_do_op_dump(pTHX_ I32 level, PerlIO *file, const OP *o)
     case OP_GREPWHILE:
     case OP_OR:
     case OP_AND:
+    case OP_ITER:
+    case OP_ITER_ARY:
+    case OP_ITER_LAZYIV:
 	Perl_dump_indent(aTHX_ level, file, "OTHER ===> ");
 	if (cLOGOPo->op_other)
 	    PerlIO_printf(file, "%"UVuf"\n", sequence_num(cLOGOPo->op_other));

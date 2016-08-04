@@ -3040,7 +3040,7 @@ PP(pp_iter)
         break;
 
     default:
-	DIE(aTHX_ "panic: pp_iter, type=%u", CxTYPE(cx));
+	DIE(aTHX_ "panic: pp_iter, unhandled CXt type=%u", CxTYPE(cx));
     }
 
 #if 0

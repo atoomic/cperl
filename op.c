@@ -131,12 +131,15 @@ static const char array_passed_to_stat[] =
 */
 
 #if PTRSIZE == 8
-#define VALIDTYPE(stash) (stash && PTR2IV(stash) > 0x1000 \
-                          && PTR2IV(stash) < 0x1000000000000  \
-                          && SvTYPE(stash) == SVt_PVHV)
+#define VALIDTYPE(stash) ( \
+    stash \
+    /* && PTR2IV(stash) > 0x1000 && PTR2IV(stash) < 0x1000000000000 */ \
+    && SvTYPE(stash) == SVt_PVHV)
 #else
-#define VALIDTYPE(stash) (stash && PTR2IV(stash) > 0x1000 \
-                          && SvTYPE(stash) == SVt_PVHV)
+#define VALIDTYPE(stash) ( \
+    stash \
+    /* && PTR2IV(stash) > 0x1000 */ \
+    && SvTYPE(stash) == SVt_PVHV)
 #endif
 
 #define IS_AND_OP(o)   (o->op_type == OP_AND)
@@ -7795,24 +7798,22 @@ Perl_newWHILEOP(pTHX_ I32 flags, I32 debuggable PERL_UNUSED_DECL, LOOP *loop,
 
     if (expr) {
 	scalar(listop);
-        if (expr->op_type != OP_ITER) {
+        if (!OP_IS_ITER(expr->op_type)) {
             o = new_logop(OP_AND, 0, &expr, &listop);
             if (o == expr && o->op_type == OP_CONST && !SvTRUE(cSVOPo->op_sv)) {
                 op_free((OP*)loop);
                 return expr;		/* listop already freed by new_logop */
             }
-            if (listop)
-                ((LISTOP*)listop)->op_last->op_next =
-                    (o == listop ? redo : LINKLIST(o));
         } else {
             assert(listop);
-            o = expr;
-            op_free(cUNOPo->op_first); /* the temp. stub */
-            cUNOPo->op_first = listop; /* yes */
-            if (listop)
-                ((LISTOP*)listop)->op_last->op_next =
-                    (o == listop ? redo : o);
+            o = scalar(expr);
+            cLOGOPo->op_first = listop;
+            cLOGOPo->op_other = listop->op_next; /* ignore the lineseq */
+            o->op_next = o;
         }
+        if (listop)
+            ((LISTOP*)listop)->op_last->op_next =
+                (o == listop ? redo : LINKLIST(o));
     }
     else
 	o = listop;
@@ -7832,8 +7833,12 @@ Perl_newWHILEOP(pTHX_ I32 flags, I32 debuggable PERL_UNUSED_DECL, LOOP *loop,
 
     if (next) {
 	loop->op_nextop = next;
-        if (expr->op_type == OP_ITER)
+        if (OP_IS_ITER(expr->op_type)) {
+            loop->op_first->op_next = LINKLIST(OpSIBLING(loop->op_first));
+            loop->op_last->op_next = (OP*)loop;
+            loop->op_next = expr;
             expr->op_next = o;
+        }
     }
     else
 	loop->op_nextop = o;
@@ -7938,7 +7943,7 @@ Perl_newFOROP(pTHX_ I32 flags, OP *sv, OP *expr, OP *block, OP *cont)
 	 * set the STACKED flag to indicate that these values are to be
 	 * treated as min/max values by 'pp_enteriter'.
 	 */
-	const UNOP* const flip = (UNOP*)((UNOP*)((BINOP*)expr)->op_first)->op_first;
+	const UNOP* const flip = (UNOP*)cUNOPx(cBINOPx(expr)->op_first)->op_first;
 	LOGOP* const range = (LOGOP*) flip->op_first;
 	OP* const left  = range->op_first;
 	OP* const right = OpSIBLING(left);
@@ -8008,7 +8013,8 @@ Perl_newFOROP(pTHX_ I32 flags, OP *sv, OP *expr, OP *block, OP *cont)
 #endif
     }
     loop->op_targ = padoff;
-    wop = newWHILEOP(flags, 1, loop, newUNOP(optype, 0), block, cont, 0);
+    wop = newWHILEOP(flags, 1, loop, newOP(optype, OPf_KIDS),
+                     block, cont, 0);
     return wop;
 }
 
@@ -15421,12 +15427,35 @@ Perl_rpeep(pTHX_ OP *o)
 		break;
 	    }
 
+            /* check loop bounds:
+               1) if index bound to size/arylen, optimize to unchecked aelem_u variants,
+                  even without parametrized typed.
+                  need to check the right array, and if the loop index is used as is, or
+                  within an expression.
+               2) with static bounds check unrolling.
+            */
 	    if (OpSIBLING(o) && OP_TYPE_IS(OpSIBLING(o), OP_LEAVELOOP)) {
                 OP *leave = OpSIBLING(o);
                 OP *next = S_op_next_nn(o);
-                OP *from = OpSIBLING(next); /* only if STACKED? */
-                OP *to   = OpSIBLING(from);
+                OP *from, *to;
                 o->op_opt = 0;
+                /* XXX hack the wrong linklist */
+                /*if (!next) {
+                    LOOP* loop = (LOOP*)((UNOP*)leave)->op_first;
+                    o->op_next = OpSIBLING(loop->op_first);
+                    next = o->op_next;
+                    from = OpSIBLING(next);
+                } else */
+                if (OP_IS_ITER(next->op_type)) { /* fixup iter hack */
+                    LOOP* loop = (LOOP*)((UNOP*)leave)->op_first;
+                    LINKLIST(OpSIBLING(loop->op_first)); /* relink the range */
+                    o->op_next = ((UNOP*)OpSIBLING(loop->op_first))->op_first; /* nextstate -> pushmark */
+                    loop->op_next = next; /* enteriter -> iter */
+                    from = OpSIBLING(o->op_next);
+                    OpSIBLING(loop->op_first)->op_next = loop->op_last;
+                } else
+                    from = OpSIBLING(next);
+                to = OpSIBLING(from);
                 if (next != o && oldop)
                     oldop->op_next = o;
 
@@ -16137,7 +16166,7 @@ Perl_rpeep(pTHX_ OP *o)
 		break;
 
 	    iter = enter->op_next;
-	    if (!iter || iter->op_type != OP_ITER)
+	    if (!iter || !OP_IS_ITER(iter->op_type))
 		break;
 	    
 	    expushmark = enter->op_first;
