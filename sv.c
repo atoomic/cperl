@@ -9342,7 +9342,6 @@ Perl_newSVhek(pTHX_ const HEK *const hek)
             /* A hash that isn't using shared hash keys has to have
 	       the flag in every key so that we know not to try to call
 	       share_hek_hek on it.  */
-
 	    SV * const sv = newSVpvn (HEK_KEY(hek), HEK_LEN(hek));
 	    if (HEK_UTF8(hek))
 		SvUTF8_on (sv);

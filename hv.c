@@ -3241,6 +3241,11 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
 	Safefree(str);
 }
 
+/* replaces HeNEXT(he) chains */
+HEK*
+S_HekNEXT(HEK* hek) {
+}
+
 /* get a (constant) string ptr from the global string table
  * string will get added if it is not already there.
  * len and hash must both be valid for str.
