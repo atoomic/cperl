@@ -95,7 +95,6 @@ S_new_he(pTHX)
 STATIC HEK *
 S_save_hek_flags(const char *str, I32 len, U32 hash, int flags)
 {
-    const int flags_masked = flags & HVhek_MASK;
     char *k;
     HEK *hek;
 
@@ -105,9 +104,9 @@ S_save_hek_flags(const char *str, I32 len, U32 hash, int flags)
     hek = (HEK*)k;
     Copy(str, HEK_KEY(hek), len, char);
     HEK_KEY(hek)[len] = 0;
-    HEK_LEN(hek) = len;
+    HEK_LEN_UTF8(hek) = ((flags & HVhek_UTF8) << 31) | len;
     HEK_HASH(hek) = hash;
-    HEK_FLAGS(hek) = (unsigned char)flags_masked | HVhek_UNSHARED;
+    HEK_FLAGS(hek) = (unsigned char)((flags & 0xfe) | HVhek_UNSHARED);
 
     if (flags & HVhek_FREEKEY)
 	Safefree(str);
@@ -150,7 +149,7 @@ Perl_hek_dup(pTHX_ HEK *source, CLONE_PARAMS* param)
     else {
 	shared
 	    = share_hek_flags(HEK_KEY(source), HEK_LEN(source),
-			      HEK_HASH(source), HEK_FLAGS(source));
+			      HEK_HASH(source), HEK_FLAGS(source) | HEK_UTF8(source));
 	ptr_table_store(PL_ptr_table, source, shared);
     }
     return shared;
@@ -194,14 +193,14 @@ Perl_he_dup(pTHX_ const HE *e, bool shared, CLONE_PARAMS* param)
 	else {
 	    shared
 		= share_hek_flags(HEK_KEY(source), HEK_LEN(source),
-				  HEK_HASH(source), HEK_FLAGS(source));
+				  HEK_HASH(source), HEK_FLAGS(source) | HEK_UTF8(source));
 	    ptr_table_store(PL_ptr_table, source, shared);
 	}
 	HeKEY_hek(ret) = shared;
     }
     else
 	HeKEY_hek(ret) = save_hek_flags(HeKEY(e), HeKLEN(e), HeHASH(e),
-                                        HeKFLAGS(e));
+                                        HeKFLAGS_UTF8(e));
     HeVAL(ret) = sv_dup_inc(HeVAL(e), param);
     return ret;
 }
@@ -399,7 +398,6 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     HE *entry;
     HE **oentry;
     HEK *keysv_hek = NULL;
-    int masked_flags;
     const int return_svp = action & HV_FETCH_JUST_SV;
     bool is_utf8;
 #ifdef DEBUGGING
@@ -533,6 +531,11 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 	    hash = 0;
 	}
     }
+    if (!HvTOTALKEYS(hv)) {
+        entry = NULL;
+        oentry = &entry;
+        goto not_found;
+    }
 
     if (keysv && (SvIsCOW_shared_hash(keysv))) {
         if (HvSHAREKEYS(hv)) {
@@ -552,11 +555,10 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     else if (!hash)
         PERL_HASH(hash, key, klen);
 
-    masked_flags = (flags & HVhek_MASK);
-
 #ifdef DYNAMIC_ENV_FETCH
     if (!HvARRAY(hv)) {
-        entry = oentry = NULL;
+        entry = NULL;
+        oentry = &entry;
     } else
 #endif
     {
@@ -596,24 +598,44 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         }
         if (!entry)
             goto not_found;
-        /* failed on shortcut - do full search loop */
+        /* failed on shortcut */
         entry = orig_entry;
+        goto full_search_loop;
+#ifdef HV_STATIC_HEKCMP
+    }
+    else if (LIKELY(klen <= 256)) {
+        const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | klen;
+        struct static_hek hekcmp = { hash, len_utf8, "" };
+        Move(key, hekcmp.hek_key, klen, char);
+
+        for (; entry; entry = HeNEXT(entry)) {
+            DEBUG_H(linear++);
+            /* compare the first 2 U32 and the string at once */
+            if (memNE(HeKEY_hek(entry),&hekcmp,klen+8))
+                continue;
+            break;
+        }
+#endif
+    } else
+    full_search_loop: {
+        const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | klen;
+        for (; entry; entry = HeNEXT(entry)) {
+            const HEK *hek = HeKEY_hek(entry);
+            DEBUG_H(linear++);
+            if (HEK_HASH(hek) != hash)		/* strings can't be equal */
+                continue;
+            if (HEK_LEN_UTF8(hek) != len_utf8)
+                continue;
+            if (memNE(HEK_KEY(hek),key,klen))	/* is this it? */
+                continue;
+            break;
+        }
     }
 
-    for (; entry; entry = HeNEXT(entry)) {
-        DEBUG_H(linear++);
-	if (HeHASH(entry) != hash)		/* strings can't be equal */
-	    continue;
-	if (HeKLEN(entry) != klen)
-	    continue;
-	if (memNE(HeKEY(entry),key,klen))	/* is this it? */
-	    continue;
-	if ((HeKFLAGS(entry) ^ masked_flags) & HVhek_UTF8)
-	    continue;
-
-      found:
+    if (entry) found: {
+        const int masked_flags = (flags & HVhek_MASK);
         if (action & (HV_FETCH_LVALUE|HV_FETCH_ISSTORE)) {
-	    if (HeKFLAGS(entry) != masked_flags) {
+	    if ((HeKFLAGS_UTF8(entry) & HVhek_MASK) != masked_flags) {
 		/* We match if HVhek_UTF8 bit in our flags and hash key's
 		   match.  But if entry was set previously with HVhek_WASUTF8
 		   and key now doesn't (or vice versa) then we should change
@@ -623,7 +645,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 		       need. As keys are shared we can't just write to the
 		       flag, so we share the new one, unshare the old one.  */
 		    HEK * const new_hek = share_hek_flags(key, klen, hash,
-						   masked_flags);
+                                                          flags & 0xff);
 		    unshare_hek (HeKEY_hek(entry));
 		    HeKEY_hek(entry) = new_hek;
 		}
@@ -635,8 +657,10 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 		    Perl_croak(aTHX_ S_strtab_error,
 			       action & HV_FETCH_LVALUE ? "fetch" : "store");
 		}
-		else
-		    HeKFLAGS(entry) = masked_flags;
+		else {
+		    HeKFLAGS(entry) = masked_flags & 0xfe;
+                    HeKUTF8(entry) = masked_flags & 1;
+                }
 		if (masked_flags & HVhek_MASK)
 		    HvHASKFLAGS_on(hv);
 	    }
@@ -653,7 +677,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 			   caused a call into hv_store, which in turn would
 			   check magic, and if there is no magic end up pretty
 			   much back at this point (in hv_store's code).  */
-			break;
+                        goto not_found;
 		    }
 		    /* LVAL fetch which actually needs a store.  */
 		    val = newSV(0);
@@ -671,7 +695,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 	} else if (HeVAL(entry) == &PL_sv_placeholder) {
 	    /* A deleted slot. If we find a placeholder, we pretend we
                haven't found anything */
-	    break;
+	    goto not_found;
 	}
 	if (flags & HVhek_FREEKEY)
 	    Safefree(key);
@@ -784,20 +808,16 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     }
 
     /* Welcome to hv_store...  */
-
     assert(HvARRAY(hv));
-#if 0
-    if (!HvARRAY(hv)) {
-	/* Not sure if we can get here.  I think the only case of *oentry being
-	   NULL is for %ENV with dynamic env fetch.  But that should disappear
-	   with magic in the previous code.  */
-	char *array;
-	Newxz(array,
-	     PERL_HV_ARRAY_ALLOC_BYTES(xhv->xhv_max+1),
-	     char);
-	HvARRAY(hv) = (HE**)array;
-    }
+    if (!HvTOTALKEYS(hv) && !hash) { /* bypassed hash above */
+        if (keysv && (SvIsCOW_shared_hash(keysv)))
+            hash = SvSHARED_HASH(keysv);
+        else if (!hash)
+            PERL_HASH(hash, key, klen);
+#ifdef PERL_PERTURB_KEYS_TOP
+        oentry = &(HvARRAY(hv))[hash & (I32) xhv->xhv_max];
 #endif
+    }
 
 #ifndef PERL_PERTURB_KEYS_TOP
     oentry = &HvARRAY(hv)[ HvHASH_INDEX(hash, xhv->xhv_max) ];
@@ -889,7 +909,7 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 
     if (val == &PL_sv_placeholder)
 	HvPLACEHOLDERS(hv)++;
-    if (masked_flags & HVhek_MASK)
+    if (flags & HVhek_MASK)
 	HvHASKFLAGS_on(hv);
 
     xhv->xhv_keys++;
@@ -939,7 +959,7 @@ S_hv_common_magical(pTHX_ HV *hv, SV **keyp, const char *key, const I32 klen,
 #ifndef ENV_IS_CASELESS
     PERL_UNUSED_ARG(hash);
 #endif
-    
+
     *return_action = HV_COMMON_MAGICAL_IGNORE;
     if (SvRMAGICAL(hv) && !(action & (HV_FETCH_ISSTORE|HV_FETCH_ISEXISTS))) {
         if (mg_find((const SV *)hv, PERL_MAGIC_tied)
@@ -1237,13 +1257,9 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     HE *entry;
     HE **oentry;
     HE **first_entry;
-    bool is_utf8 = (k_flags & HVhek_UTF8) ? TRUE : FALSE;
-    int masked_flags;
     HEK *keysv_hek = NULL;
+    bool is_utf8 = (k_flags & HVhek_UTF8) ? TRUE : FALSE;
     U8 mro_changes = 0; /* 1 = isa; 2 = package moved */
-    SV *sv;
-    GV *gv = NULL;
-    HV *stash = NULL;
 #ifdef DEBUGGING
     unsigned int linear = 0;
 #endif
@@ -1288,9 +1304,10 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
 	    }
 	}
     }
-    xhv = (XPVHV*)SvANY(hv);
     if (!HvARRAY(hv))
 	return NULL;
+    if (!HvTOTALKEYS(hv))
+        goto not_found;
 
     if (is_utf8 && !(k_flags & HVhek_KEYCANONICAL)) {
 	const char * const keysave = key;
@@ -1332,7 +1349,6 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         PERL_HASH(hash, key, klen);
 
     masked_flags = (k_flags & HVhek_MASK);
-
     first_entry = oentry = &HvARRAY(hv)[ HvHASH_INDEX(hash, HvMAX(hv)) ];
     entry = *oentry;
 
@@ -1353,7 +1369,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         int keysv_flags = HEK_FLAGS(keysv_hek);
 
         for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
-            HEK *hek = HeKEY_hek(entry);
+            const HEK *hek = HeKEY_hek(entry);
             DEBUG_H(linear++);
             if (hek == keysv_hek)
                 goto found;
@@ -1367,18 +1383,43 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         entry = *oentry;
     }
 
-    for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
-        DEBUG_H(linear++);
-	if (HeHASH(entry) != hash)		/* strings can't be equal */
-	    continue;
-	if (HeKLEN(entry) != klen)
-	    continue;
-	if (memNE(HeKEY(entry),key,klen))	/* is this it? */
-	    continue;
-	if ((HeKFLAGS(entry) ^ masked_flags) & HVhek_UTF8)
-	    continue;
+#ifdef HV_STATIC_HEKCMP
+    if (LIKELY(klen <= 256)) {
+        const U32 len_utf8 = ((k_flags & HVhek_UTF8) << 31) | klen;
+        struct static_hek hekcmp = { hash, len_utf8, "" };
+        Move(key, hekcmp.hek_key, klen, char);
 
-      found:
+        for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
+            DEBUG_H(linear++);
+            /* compare the first 2 U32 and the string at once */
+            if (memNE(HeKEY_hek(entry),&hekcmp,klen+8))
+                continue;
+        }
+    } else
+#endif
+    {
+        const U32 len_utf8 = ((k_flags & HVhek_UTF8) << 31) | klen;
+        for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
+            const HEK *hek = HeKEY_hek(entry);
+            DEBUG_H(linear++);
+            if (HEK_HASH(hek) != hash)		/* strings can't be equal */
+                continue;
+            if (HEK_LEN_UTF8(hek) != len_utf8)
+                continue;
+            if (memNE(HEK_KEY(hek),key,klen))	/* is this it? */
+                continue;
+            /* only if both have UTF8 bit set or not. ignores WASUTF8 */
+            /*if ((HeKUTF8(entry) ^ k_flags) & HVhek_UTF8)
+              continue;*/
+        }
+    }
+
+    if (entry)
+    found: {
+        SV *sv;
+        GV *gv = NULL;
+        HV *stash = NULL;
+
 	if (hv == PL_strtab) {
 	    if (k_flags & HVhek_FREEKEY)
 		Safefree(key);
@@ -1415,7 +1456,8 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
                  || (klen == 1 && key[0] == ':'))
                 && (klen != 6 || hv != PL_defstash || memNE(key,"main::",6))
                 && SvTYPE(gv) == SVt_PVGV && (stash = GvHV((GV *)gv))
-                && HvENAME_get(stash)) {
+                && HvENAME_get(stash))
+            {
                 /* A previous version of this code checked that the
                  * GV was still in the symbol table by fetching the
                  * GV with its name. That is not necessary (and
@@ -1426,72 +1468,72 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
                 SvREFCNT_inc_simple_void_NN(sv_2mortal((SV *)gv));
             }
             else if (klen == 3 && strnEQ(key, "ISA", 3) && GvAV(gv)) {
-                    AV *isa = GvAV(gv);
-                    MAGIC *mg = mg_find((SV*)isa, PERL_MAGIC_isa);
+                AV *isa = GvAV(gv);
+                MAGIC *mg = mg_find((SV*)isa, PERL_MAGIC_isa);
 
-		    mro_changes = 1;
-                    if (mg) {
-                        if (mg->mg_obj == (SV*)gv) {
-                            /* This is the only stash this ISA was used for.
-                             * The isaelem magic asserts if there's no
-                             * isa magic on the array, so explicitly
-                             * remove the magic on both the array and its
-                             * elements.  @ISA shouldn't be /too/ large.
+                mro_changes = 1;
+                if (mg) {
+                    if (mg->mg_obj == (SV*)gv) {
+                        /* This is the only stash this ISA was used for.
+                         * The isaelem magic asserts if there's no
+                         * isa magic on the array, so explicitly
+                         * remove the magic on both the array and its
+                         * elements.  @ISA shouldn't be /too/ large.
+                         */
+                        SV **svp, **end;
+                    strip_magic:
+                        svp = AvARRAY(isa);
+                        end = svp + AvFILLp(isa)+1;
+                        while (svp < end) {
+                            if (*svp)
+                                mg_free_type(*svp, PERL_MAGIC_isaelem);
+                            ++svp;
+                        }
+                        mg_free_type((SV*)GvAV(gv), PERL_MAGIC_isa);
+                    }
+                    else {
+                        /* mg_obj is an array of stashes
+                           Note that the array doesn't keep a reference
+                           count on the stashes.
+                        */
+                        AV *av = (AV*)mg->mg_obj;
+                        SV **svp, **arrayp;
+                        SSize_t index;
+                        SSize_t items;
+
+                        assert(SvTYPE(mg->mg_obj) == SVt_PVAV);
+
+                        /* remove the stash from the magic array */
+                        arrayp = svp = AvARRAY(av);
+                        items = AvFILLp(av) + 1;
+                        if (items == 1) {
+                            assert(*arrayp == (SV *)gv);
+                            mg->mg_obj = NULL;
+                            /* avoid a double free on the last stash */
+                            AvFILLp(av) = -1;
+                            /* The magic isn't MGf_REFCOUNTED, so release
+                             * the array manually.
                              */
-                            SV **svp, **end;
-                        strip_magic:
-                            svp = AvARRAY(isa);
-                            end = svp + AvFILLp(isa)+1;
-                            while (svp < end) {
-                                if (*svp)
-                                    mg_free_type(*svp, PERL_MAGIC_isaelem);
-                                ++svp;
-                            }
-                            mg_free_type((SV*)GvAV(gv), PERL_MAGIC_isa);
+                            SvREFCNT_dec_NN(av);
+                            goto strip_magic;
                         }
                         else {
-                            /* mg_obj is an array of stashes
-                               Note that the array doesn't keep a reference
-                               count on the stashes.
-                             */
-                            AV *av = (AV*)mg->mg_obj;
-                            SV **svp, **arrayp;
-                            SSize_t index;
-                            SSize_t items;
-
-                            assert(SvTYPE(mg->mg_obj) == SVt_PVAV);
-
-                            /* remove the stash from the magic array */
-                            arrayp = svp = AvARRAY(av);
-                            items = AvFILLp(av) + 1;
-                            if (items == 1) {
-                                assert(*arrayp == (SV *)gv);
-                                mg->mg_obj = NULL;
-                                /* avoid a double free on the last stash */
-                                AvFILLp(av) = -1;
-                                /* The magic isn't MGf_REFCOUNTED, so release
-                                 * the array manually.
-                                 */
-                                SvREFCNT_dec_NN(av);
-                                goto strip_magic;
+                            while (items--) {
+                                if (*svp == (SV*)gv)
+                                    break;
+                                ++svp;
                             }
-                            else {
-                                while (items--) {
-                                    if (*svp == (SV*)gv)
-                                        break;
-                                    ++svp;
-                                }
-                                index = svp - arrayp;
-                                assert(index >= 0 && index <= AvFILLp(av));
-                                if (index < AvFILLp(av)) {
-                                    arrayp[index] = arrayp[AvFILLp(av)];
-                                }
-                                arrayp[AvFILLp(av)] = NULL;
-                                --AvFILLp(av);
+                            index = svp - arrayp;
+                            assert(index >= 0 && index <= AvFILLp(av));
+                            if (index < AvFILLp(av)) {
+                                arrayp[index] = arrayp[AvFILLp(av)];
                             }
+                            arrayp[AvFILLp(av)] = NULL;
+                            --AvFILLp(av);
                         }
                     }
                 }
+            }
 	}
 
 	sv = d_flags & G_DISCARD ? HeVAL(entry) : sv_2mortal(HeVAL(entry));
@@ -1529,6 +1571,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
                 }
 		hv_free_ent(hv, entry);
 	    }
+            xhv = (XPVHV*)SvANY(hv);
 	    xhv->xhv_keys--;
 	    if (xhv->xhv_keys == 0)
 	        HvHASKFLAGS_off(hv);
@@ -1776,10 +1819,11 @@ Perl_newHVhv(pTHX_ HV *ohv)
 
 	    /* Copy the linked list of entries. */
 	    for (; oent; oent = HeNEXT(oent)) {
-		const U32 hash   = HeHASH(oent);
-		const char * const key = HeKEY(oent);
-		const I32 len    = HeKLEN(oent);
-		const int flags  = HeKFLAGS(oent);
+                const HEK *hek = HeKEY_hek(oent);
+		const U32 hash   = HEK_HASH(hek);
+		const char * const key = HEK_KEY(hek);
+		const I32 len    = HEK_LEN(hek);
+		const int flags  = HEK_FLAGS_UTF8(hek);
 		HE * const ent   = new_HE();
 		SV *const val    = HeVAL(oent);
 
@@ -1818,7 +1862,7 @@ Perl_newHVhv(pTHX_ HV *ohv)
 		(void)hv_store_ent(hv, keysv, val, 0);
 	    else
 	        (void)hv_store_flags(hv, HeKEY(entry), HeKLEN(entry), val,
-				 HeHASH(entry), HeKFLAGS(entry));
+                                     HeHASH(entry), HeKFLAGS_UTF8(entry));
 	}
 	HvRITER_set(ohv, riter);
 	HvEITER_set(ohv, eiter);
@@ -1867,7 +1911,8 @@ Perl_hv_copy_hints_hv(pTHX_ HV *const ohv)
 		(void)hv_store_ent(hv, heksv, sv, 0);
 	    else {
 		(void)hv_common(hv, heksv, HeKEY(entry), HeKLEN(entry),
-				 HeKFLAGS(entry), HV_FETCH_ISSTORE|HV_FETCH_JUST_SV, sv, HeHASH(entry));
+                                HeKFLAGS_UTF8(entry),
+                                HV_FETCH_ISSTORE|HV_FETCH_JUST_SV, sv, HeHASH(entry));
 		SvREFCNT_dec_NN(heksv);
 	    }
 	}
@@ -3187,16 +3232,33 @@ S_unshare_hek_or_pvn(pTHX_ const HEK *hek, const char *str, I32 len, U32 hash)
             if (entry == he_he)
                 break;
         }
+#ifdef HV_STATIC_HEKCMP
+    }
+    else if (LIKELY(len <= 256)) {
+        const int wasutf8 = k_flags & HVhek_WASUTF8;
+        const U32 len_utf8 = ((k_flags & HVhek_UTF8) << 31) | len;
+        struct static_hek hekcmp = { hash, len_utf8, "" };
+        Move(str, hekcmp.hek_key, len, char);
+
+        for (entry = *oentry; entry; oentry = &HeNEXT(entry), entry = *oentry) {
+            /* compare the first 2 U32 and the string at once */
+            if (memNE(HeKEY_hek(entry),&hekcmp,len+8)
+                || ((HeKFLAGS(entry) & HVhek_WASUTF8) != wasutf8))
+                continue;
+            break;
+        }
+#endif
     } else {
-        const int flags_masked = k_flags & HVhek_MASK;
+        const int wasutf8 = k_flags & HVhek_WASUTF8;
+        const U32 len_utf8 = ((k_flags & HVhek_UTF8) << 31) | len;
         for (entry = *oentry; entry; oentry = &HeNEXT(entry), entry = *oentry) {
             if (HeHASH(entry) != hash)		/* strings can't be equal */
                 continue;
-            if (HeKLEN(entry) != len)
+            if (HEK_LEN_UTF8(HeKEY_hek(entry)) != len_utf8)
                 continue;
             if (HeKEY(entry) != str && memNE(HeKEY(entry),str,len))	/* is this it? */
                 continue;
-            if (HeKFLAGS(entry) != flags_masked)
+            if ((HeKFLAGS(entry) & HVhek_WASUTF8) != wasutf8)
                 continue;
             break;
         }
@@ -3262,9 +3324,10 @@ STATIC HEK *
 S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 {
     HE *entry;
-    const int flags_masked = flags & HVhek_MASK;
-    const U32 hindex = HvHASH_INDEX(hash, HvMAX(PL_strtab));
-    XPVHV * const xhv = (XPVHV*)SvANY(PL_strtab);
+    const int wasutf8  = flags & HVhek_WASUTF8;
+    const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | len;
+    const U32 hindex   = HvHASH_INDEX(hash, HvMAX(PL_strtab));
+    XPVHV * const xhv  = (XPVHV*)SvANY(PL_strtab);
 
     PERL_ARGS_ASSERT_SHARE_HEK_FLAGS;
     assert(len >= 0);
@@ -3280,14 +3343,16 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 
     /* assert(xhv_array != 0) */
     entry = HvARRAY(PL_strtab)[hindex];
-    for (; entry; entry = HeNEXT(entry)) {
-	if (HeHASH(entry) != hash)		/* strings can't be equal */
+    for (;entry; entry = HeNEXT(entry)) {
+        const HEK *hek = HeKEY_hek(entry);
+	if (HEK_HASH(hek) != hash)		/* strings can't be equal */
 	    continue;
-	if (HeKLEN(entry) != len)
+	if (HEK_LEN_UTF8(hek) != len_utf8)
 	    continue;
-	if (HeKEY(entry) != str && memNE(HeKEY(entry),str,len))	/* is this it? */
+	if (HEK_KEY(hek) != str && memNE(HEK_KEY(hek),str,len))	/* is this it? */
 	    continue;
-	if (HeKFLAGS(entry) != flags_masked)
+        /* XXX really? */
+	if ((HEK_FLAGS(hek) & HVhek_WASUTF8) != wasutf8)
 	    continue;
 	break;
     }
@@ -3316,9 +3381,9 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 
 	Copy(str, HEK_KEY(hek), len, char);
 	HEK_KEY(hek)[len] = 0;
-	HEK_LEN(hek) = len;
+	HEK_LEN_UTF8(hek) = len_utf8;
 	HEK_HASH(hek) = hash;
-	HEK_FLAGS(hek) = (unsigned char)flags_masked;
+	HEK_FLAGS(hek) = (unsigned char)(flags & 0xfe);
 
 	/* Still "point" to the HEK, so that other code need not know what
 	   we're up to.  */
