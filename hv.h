@@ -227,7 +227,7 @@ usually preferable for finding the value of a key.
 
 =for apidoc Am|bool|HeKSVKEY|HE* he
 Returns true if the key is an C<SV*>, or false if the hash entry does not
-contain an C<SV*> key. It checks if C<HeKLEN(he) == (U32)HEf_SVKEY>.
+contain an C<SV*> key. It checks if C<HeKLEN(he) == HEf_SVKEY>.
 
 =for apidoc Am|U32|HeKLEN|HE* he
 If this is equal to C<HEf_SVKEY>, it indicates the entry
@@ -317,9 +317,9 @@ C<SV*>.
 #endif
 
 /* these hash entry flags rides on HeKLEN (for use only in magic/tied HVs) */
-#define HEf_SVKEY	2147483646    /* hent_key is an SV* */
+#define HEf_SVKEY	-2    		/* hent_key is an SV* */
 #ifdef PERL_CORE
-#define HEf_SVKEY_UTF8	4294967294u   /* to check/set the full unmasked word */
+#define HEf_SVKEY_UTF8	4294967294u 	/* to check/set the full unmasked word */
 #endif
 
 #ifndef PERL_CORE
@@ -466,7 +466,7 @@ C<SV*>.
 #define HeSVKEY_set(he,sv)	((HEK_LEN_UTF8(HeKEY_hek(he)) = HEf_SVKEY_UTF8), \
                                  (HeKEY_sv(he) = sv))
 #else
-#define HeSVKEY_set(he,sv)	((HEK_LEN(HeKEY_hek(he)) = HEf_SVKEY), \
+#define HeSVKEY_set(he,sv)	((HEK_LEN(HeKEY_hek(he)) = HEf_SVKEY & 0x7fffffff), \
                                  (HEK_UTF8(HeKEY_hek(he)) = 1), \
                                  (HeKEY_sv(he) = sv))
 #endif
@@ -487,7 +487,7 @@ C<SV*>.
 #ifdef PERL_CORE
 #define HEK_IS_SVKEY(hek) HEK_LEN_UTF8(hek) == HEf_SVKEY_UTF8
 #else
-#define HEK_IS_SVKEY(hek) HEK_LEN(hek) == HEf_SVKEY
+#define HEK_IS_SVKEY(hek) HEK_LEN(hek) == (HEf_SVKEY & 0x7fffffff)
 #endif
 
 #define HVhek_UTF8	0x01 /* Moved from flags to len. Key is utf8 encoded. */
