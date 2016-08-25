@@ -4855,7 +4855,7 @@ Perl_sv_setsv_cow(pTHX_ SV *dstr, SV *sstr)
 	    /* source is a COW shared hash key.  */
 	    DEBUG_C(PerlIO_printf(Perl_debug_log,
 				  "Fast copy on write: Sharing hash\n"));
-            assert(HEK_LEN(hek) != HEf_SVKEY);
+            assert(!(HEK_IS_SVKEY(hek)));
             new_pv = HEK_KEY(hek);
             if (SvTAINTED(sstr))
                 HEK_TAINTED_on(hek);
@@ -5009,7 +5009,7 @@ Perl_sv_sethek(pTHX_ SV *const sv, const HEK *const hek)
 	return;
     }
 
-    if (HEK_LEN(hek) == HEf_SVKEY) {
+    if (HEK_IS_SVKEY(hek)) {
 	sv_setsv(sv, *(SV**)HEK_KEY(hek));
         return;
     } else {
@@ -5691,16 +5691,17 @@ Perl_sv_magicext(pTHX_ SV *const sv, SV *const obj, const int how,
     mg->mg_type = how;
     mg->mg_len = namlen;
     if (name) {
-	if (namlen > 0)
-	    mg->mg_ptr = savepvn(name, namlen);
-	else if (namlen == HEf_SVKEY) {
+	if (namlen == HEf_SVKEY) {
 	    /* Yes, this is casting away const. This is only for the case of
 	       HEf_SVKEY. I think we need to document this aberation of the
 	       constness of the API, rather than making name non-const, as
 	       that change propagating outwards a long way.  */
 	    mg->mg_ptr = (char*)SvREFCNT_inc_simple_NN((SV *)name);
-	} else
+	} else if (namlen > 0) {
+	    mg->mg_ptr = savepvn(name, namlen);
+	} else {
 	    mg->mg_ptr = (char *) name;
+        }
     }
     mg->mg_virtual = (MGVTBL *) vtable;
 
@@ -5824,10 +5825,10 @@ S_sv_unmagicext_flags(pTHX_ SV *const sv, const int type, MGVTBL *vtbl, const U3
 	    if (virt && virt->svt_free)
 		virt->svt_free(aTHX_ sv, mg);
 	    if (mg->mg_ptr && mg->mg_type != PERL_MAGIC_regex_global) {
-		if (mg->mg_len > 0)
-		    Safefree(mg->mg_ptr);
-		else if (mg->mg_len == HEf_SVKEY)
+		if (mg->mg_len == HEf_SVKEY)
 		    SvREFCNT_dec(MUTABLE_SV(mg->mg_ptr));
+		else if (mg->mg_len > 0)
+		    Safefree(mg->mg_ptr);
 		else if (mg->mg_type == PERL_MAGIC_utf8)
 		    Safefree(mg->mg_ptr);
             }
@@ -9322,7 +9323,7 @@ Perl_newSVhek(pTHX_ const HEK *const hek)
 	return sv;
     }
 
-    if (HEK_LEN(hek) == HEf_SVKEY) {
+    if (HEK_IS_SVKEY(hek)) {
 	return newSVsv(*(SV**)HEK_KEY(hek));
     } else {
 	if (HEK_WASUTF8(hek)) {
@@ -13310,7 +13311,9 @@ Perl_mg_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *const param)
 			  : sv_dup(nmg->mg_obj, param);
 
 	if (nmg->mg_ptr && nmg->mg_type != PERL_MAGIC_regex_global) {
-	    if (nmg->mg_len > 0) {
+	    if (nmg->mg_len == HEf_SVKEY)
+		nmg->mg_ptr = (char*)sv_dup_inc((const SV *)nmg->mg_ptr, param);
+	    else if (nmg->mg_len > 0) {
 		nmg->mg_ptr	= SAVEPVN(nmg->mg_ptr, nmg->mg_len);
 		if (nmg->mg_type == PERL_MAGIC_overload_table &&
 			AMT_AMAGIC((AMT*)nmg->mg_ptr))
@@ -13320,8 +13323,6 @@ Perl_mg_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *const param)
 					(SV**)(namtp->table), NofAMmeth, param);
 		}
 	    }
-	    else if (nmg->mg_len == HEf_SVKEY)
-		nmg->mg_ptr = (char*)sv_dup_inc((const SV *)nmg->mg_ptr, param);
 	}
 	if ((nmg->mg_flags & MGf_DUP) && nmg->mg_virtual && nmg->mg_virtual->svt_dup) {
 	    nmg->mg_virtual->svt_dup(aTHX_ nmg, param);
@@ -15661,7 +15662,7 @@ S_find_hash_subscript(pTHX_ const HV *const hv, const SV *const val)
     PERL_ARGS_ASSERT_FIND_HASH_SUBSCRIPT;
 
     if (!hv || SvMAGICAL(hv) || !HvARRAY(hv) ||
-			(HvTOTALKEYS(hv) > FUV_MAX_SEARCH_SIZE))
+        (HvTOTALKEYS(hv) > FUV_MAX_SEARCH_SIZE))
 	return NULL;
 
     array = HvARRAY(hv);
@@ -15676,7 +15677,7 @@ S_find_hash_subscript(pTHX_ const HV *const hv, const SV *const val)
 		continue;
 	    /*if (!HeKEY(entry))
               return NULL;*/
-	    if (HeKLEN(entry) == HEf_SVKEY)
+	    if (HeKSVKEY(entry))
 		return sv_mortalcopy(HeKEY_sv(entry));
 	    return sv_2mortal(newSVhek(HeKEY_hek(entry)));
 	}
