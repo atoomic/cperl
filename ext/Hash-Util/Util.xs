@@ -235,7 +235,7 @@ bucket_array(rhv)
                         }
                         av_push(info_av, (SV *)newRV_noinc((SV *)key_av));
                     }
-                    if (HeKLEN(he) == HEf_SVKEY) {
+                    if (HeKSVKEY(he)) {
                         SV *sv= HeSVKEY(he);
                         SvGETMAGIC(sv);
                         str= SvPV(sv, len);
