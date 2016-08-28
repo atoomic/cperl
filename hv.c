@@ -586,9 +586,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
          */
         int keysv_flags = HEK_FLAGS(keysv_hek);
         HE  *orig_entry = entry;
+        const HEK *hek;
 
-        for (; entry; entry = HeNEXT(entry)) {
-            HEK *hek = HeKEY_hek(entry);
+        for (; entry && (hek = HeKEY_hek(entry)); entry = HeNEXT(entry)) {
             DEBUG_H(linear++);
             if (hek == keysv_hek)
                 goto found;
@@ -605,12 +605,13 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     else if (LIKELY(klen <= 256)) {
         const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | klen;
         struct static_hek hekcmp = { hash, len_utf8, "" };
+        const HEK *hek;
         Move(key, hekcmp.hek_key, klen, char);
 
-        for (; entry; entry = HeNEXT(entry)) {
+        for (; entry && (hek = HeKEY_hek(entry)); entry = HeNEXT(entry)) {
             DEBUG_H(linear++);
             /* compare the first 2 U32 and the string at once */
-            if (memNE(HeKEY_hek(entry),&hekcmp,klen+8))
+            if (memNE(hek,&hekcmp,klen+8))
                 continue;
             break;
         }
@@ -618,8 +619,8 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     } else
     full_search_loop: {
         const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | klen;
-        for (; entry; entry = HeNEXT(entry)) {
-            const HEK *hek = HeKEY_hek(entry);
+        const HEK *hek;
+        for (; entry && (hek = HeKEY_hek(entry)); entry = HeNEXT(entry)) {
             DEBUG_H(linear++);
             if (HEK_HASH(hek) != hash)		/* strings can't be equal */
                 continue;
@@ -1366,16 +1367,18 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
          * cases).
          */
         int keysv_flags = HEK_FLAGS(keysv_hek);
+        const HEK *hek;
 
-        for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
-            const HEK *hek = HeKEY_hek(entry);
+        for (; entry && (hek = HeKEY_hek(entry));
+               oentry = &HeNEXT(entry), entry = *oentry)
+        {
             DEBUG_H(linear++);
             if (hek == keysv_hek)
                 goto found;
             if (HEK_FLAGS(hek) != keysv_flags)
                 break; /* need to do full match */
         }
-        if (!entry)
+        if (!hek)
             goto not_found;
         /* failed on shortcut - do full search loop */
         oentry = first_entry;
@@ -1386,20 +1389,26 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
     if (LIKELY(klen <= 256)) {
         const U32 len_utf8 = ((k_flags & HVhek_UTF8) << 31) | klen;
         struct static_hek hekcmp = { hash, len_utf8, "" };
-        Move(key, hekcmp.hek_key, klen, char);
+        const HEK *hek;
 
-        for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
+        Move(key, hekcmp.hek_key, klen, char);
+        for (; entry && (hek = HeKEY_hek(entry));
+               oentry = &HeNEXT(entry), entry = *oentry)
+        {
             DEBUG_H(linear++);
             /* compare the first 2 U32 and the string at once */
-            if (memNE(HeKEY_hek(entry),&hekcmp,klen+8))
+            if (memNE(hek, &hekcmp,klen+8))
                 continue;
         }
     } else
 #endif
     {
         const U32 len_utf8 = ((k_flags & HVhek_UTF8) << 31) | klen;
-        for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
-            const HEK *hek = HeKEY_hek(entry);
+        const HEK *hek;
+
+        for (; entry && (hek = HeKEY_hek(entry));
+               oentry = &HeNEXT(entry), entry = *oentry)
+        {
             DEBUG_H(linear++);
             if (HEK_HASH(hek) != hash)		/* strings can't be equal */
                 continue;
@@ -2008,7 +2017,8 @@ Perl_hv_clear(pTHX_ HV *hv)
 	U32 i;
 	for (i = 0; i <= xhv->xhv_max; i++) {
 	    HE *entry = (HvARRAY(hv))[i];
-	    for (; entry; entry = HeNEXT(entry)) {
+            const HEK *hek;
+	    for (; entry && (hek = HeKEY_hek(entry)); entry = HeNEXT(entry)) {
 		/* not already placeholder */
 		if (HeVAL(entry) != &PL_sv_placeholder) {
 		    if (HeVAL(entry)) {
@@ -2987,7 +2997,7 @@ Perl_hv_iternext_flags(pTHX_ HV *hv, I32 flags)
              * Skip past any placeholders -- don't want to include them in
              * any iteration.
              */
-            while (entry && HeVAL(entry) == &PL_sv_placeholder) {
+            while (entry && HeKEY_hek(entry) && HeVAL(entry) == &PL_sv_placeholder) {
                 entry = HeNEXT(entry);
             }
 	}
@@ -3028,7 +3038,7 @@ Perl_hv_iternext_flags(pTHX_ HV *hv, I32 flags)
 	    if (!(flags & HV_ITERNEXT_WANTPLACEHOLDERS)) {
 		/* If we have an entry, but it's a placeholder, don't count it.
 		   Try the next.  */
-		while (entry && HeVAL(entry) == &PL_sv_placeholder)
+		while (entry && HeKEY_hek(entry) && HeVAL(entry) == &PL_sv_placeholder)
 		    entry = HeNEXT(entry);
 	    }
 	    /* Will loop again if this linked list starts NULL
@@ -3325,6 +3335,7 @@ STATIC HEK *
 S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 {
     HE *entry;
+    const HEK *hek;
     const int wasutf8  = flags & HVhek_WASUTF8;
     const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | len;
     const U32 hindex   = HvHASH_INDEX(hash, HvMAX(PL_strtab));
@@ -3344,8 +3355,7 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, U32 hash, int flags)
 
     /* assert(xhv_array != 0) */
     entry = HvARRAY(PL_strtab)[hindex];
-    for (;entry; entry = HeNEXT(entry)) {
-        const HEK *hek = HeKEY_hek(entry);
+    for (; entry && (hek = HeKEY_hek(entry)); entry = HeNEXT(entry)) {
 	if (HEK_HASH(hek) != hash)		/* strings can't be equal */
 	    continue;
 	if (HEK_LEN_UTF8(hek) != len_utf8)
@@ -3541,8 +3551,9 @@ Perl_refcounted_he_chain_2hv(pTHX_ const struct refcounted_he *chain, U32 flags)
 	HE **oentry = &HvARRAY(hv)[ HvHASH_INDEX(hash, max) ];
 	HE *entry = *oentry;
 	SV *value;
+        const HEK *hek;
 
-	for (; entry; entry = HeNEXT(entry)) {
+	for (; entry && (hek = HeKEY_hek(entry)); entry = HeNEXT(entry)) {
 	    if (HeHASH(entry) == hash) {
 		/* We might have a duplicate key here.  If so, entry is older
 		   than the key we've already put in the hash, so if they are
