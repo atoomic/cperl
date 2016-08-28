@@ -596,12 +596,11 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         }
         if (!entry)
             goto not_found;
-        /* failed on shortcut */
+        /* failed on shortcut, try full loop below */
         entry = orig_entry;
-        goto full_search_loop;
-#ifdef HV_STATIC_HEKCMP
     }
-    else if (LIKELY(klen <= 256)) {
+#ifdef HV_STATIC_HEKCMP
+    if (LIKELY(klen <= 256)) {
         const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | klen;
         struct static_hek hekcmp = { hash, len_utf8, "" };
         const HEK *hek;
@@ -610,13 +609,12 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         for (; entry; entry = HeNEXT(entry)) {
             DEBUG_H(linear++);
             /* compare the first 2 U32 and the string at once */
-            if (memNE(HeKEY_hek(entry), &hekcmp, klen+8))
-                continue;
-            break;
+            if (memEQ(HeKEY_hek(entry), &hekcmp, klen+8))
+                goto found;
         }
-#endif
     } else
-    full_search_loop: {
+#endif
+    {
         const U32 len_utf8 = ((flags & HVhek_UTF8) << 31) | klen;
         for (; entry; entry = HeNEXT(entry)) {
             const HEK *hek = HeKEY_hek(entry);
@@ -1404,8 +1402,8 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
         for (; entry; oentry = &HeNEXT(entry), entry = *oentry) {
             DEBUG_H(linear++);
             /* compare the first 2 U32 and the string at once */
-            if (memNE(HeKEY_hek(entry), &hekcmp,klen+8))
-                continue;
+            if (memEQ(HeKEY_hek(entry), &hekcmp,klen+8))
+                goto found;
         }
     } else
 #endif
@@ -1424,6 +1422,7 @@ S_hv_delete_common(pTHX_ HV *hv, SV *keysv, const char *key, I32 klen,
             /* only if both have UTF8 bit set or not. ignores WASUTF8 */
             /*if ((HeKUTF8(entry) ^ k_flags) & HVhek_UTF8)
               continue;*/
+            break;
         }
     }
 
