@@ -453,6 +453,7 @@ C<SV*>.
 				 SvUTF8(HeKEY_sv(he)) :	\
 				 (U32)HeKUTF8(he))
 #define HeSTATIC(he)		(HeKFLAGS(he) & HVhek_STATIC)
+#define HePLACEHOLDER(he)	HeVAL(he) == &PL_sv_placeholder
 
 #define HeSVKEY(he)		(HeKSVKEY(he) ? HeKEY_sv(he) : NULL)
 
