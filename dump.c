@@ -578,7 +578,7 @@ Perl_dump_packsubs_perl(pTHX_ const HV *stash, bool justperl)
 	return;
     for (i = 0; i <= HvMAX(stash); i++) {
         const HE *entry;
-	for (entry = HvARRAY(stash)[i]; entry; entry = HeNEXT(entry)) {
+	for (entry = AHe(HvARRAY(stash)[i]); entry; entry = HeNEXT(entry)) {
 	    GV * gv = (GV *)HeVAL(entry);
             if (SvROK(gv) && SvTYPE(SvRV(gv)) == SVt_PVCV)
                 /* unfake a fake GV */
@@ -1749,7 +1749,7 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 	    for (i = 0; i <= HvMAX(sv); i++) {
 		HE* h;
 		U32 count = 0;
-                for (h = HvARRAY(sv)[i]; h; h = HeNEXT(h))
+                for (h = AHe(HvARRAY(sv)[i]); h; h = HeNEXT(h))
 		    count++;
 		if (count > FREQ_MAX)
 		    count = FREQ_MAX;
@@ -1793,14 +1793,14 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 	Perl_dump_indent(aTHX_ level, file, "  KEYS = %u\n", (unsigned)usedkeys);
         {
             U32 count = 0;
-            HE **ents = HvARRAY(sv);
+            AHE *ents = HvARRAY(sv);
 
             if (ents) {
-                HE *const *const last = ents + HvMAX(sv);
+                AHE *const last = ents + HvMAX(sv);
                 count = last + 1 - ents;
                 
                 do {
-                    if (!*ents)
+                    if (!AHe(*ents))
                         --count;
                 } while (++ents <= last);
             }
@@ -1938,7 +1938,7 @@ Perl_do_sv_dump(pTHX_ I32 level, PerlIO *file, SV *sv, I32 nest, I32 maxnest, bo
 	    if (HvARRAY(hv)) {
 		int count = maxnest - nest;
 		for (i=0; i <= HvMAX(hv); i++) {
-		    for (he = HvARRAY(hv)[i]; he; he = HeNEXT(he)) {
+		    for (he = AHe(HvARRAY(hv)[i]); he; he = HeNEXT(he)) {
 			U32 hash;
 			SV * keysv;
 			const char * keypv;
@@ -2438,6 +2438,7 @@ Perl_deb_hechain(pTHX_ HE* entry)
     PerlIO_printf(Perl_debug_log, "(");
     for (; entry; entry = HeNEXT(entry), i++) {
         S_deb_hek(aTHX_ HeKEY_hek(entry), HeVAL(entry));
+        assert(HeHASH(entry));
         assert(entry != HeNEXT(entry));
         assert(i <= PERL_ARENA_SIZE/sizeof(HE));
     }
@@ -2921,7 +2922,7 @@ void
 Perl_hv_dump(pTHX_ SV* sv, bool with_values)
 {
     PerlIO* file = Perl_debug_log;
-    HE **ents = HvARRAY(sv);
+    AHE *ents = HvARRAY(sv);
     int level = 0;
     U32 i;
     Perl_dump_indent(aTHX_ level, file, "KEYS = %u\n", (unsigned)HvUSEDKEYS(sv));
@@ -2930,7 +2931,7 @@ Perl_hv_dump(pTHX_ SV* sv, bool with_values)
         for (i = 0; i <= HvMAX(sv); i++) {
             HE* h;
 	    PerlIO_printf(file, "[%u]: ", (unsigned)i);
-            for (h = ents[i]; h; h = HeNEXT(h)) {
+            for (h = AHe(ents[i]); h; h = HeNEXT(h)) {
                 if (with_values)
                     PerlIO_printf(file, "\"%s\" => %s", HeKEY(h), sv_peek(HeVAL(h)));
                 else

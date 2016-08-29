@@ -1212,8 +1212,8 @@ perl_destruct(pTHXx)
 	 */
 	I32 riter = 0;
 	const I32 max = HvMAX(PL_strtab);
-	HE * const * const array = HvARRAY(PL_strtab);
-	HE *hent = array[0];
+	AHE * const array = HvARRAY(PL_strtab);
+	HE *hent = AHe(array[0]);
 
 	for (;;) {
 	    if (hent && ckWARN_d(WARN_INTERNAL)) {
@@ -1227,7 +1227,7 @@ perl_destruct(pTHXx)
 	    if (!hent) {
 		if (++riter > max)
 		    break;
-		hent = array[riter];
+		hent = AHe(array[riter]);
 	    }
 	}
 

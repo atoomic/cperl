@@ -36,7 +36,13 @@
 #   define PERL_HASH_ITER_BUCKET(iter)      (((iter)->xhv_riter) ^ ((iter)->xhv_rand))
 #endif
 
-/* entry in hash value chain */
+/* inlined entry in hash array, 2-3 words */
+struct array_he {
+    HE		*hent_he;	/* ptr to full hash entry */
+    U32		 hent_hash;	/* hash to catch 99% fails */
+};
+
+/* entry in hash value linked list */
 struct he {
     /* Keep hent_next first in this structure, because sv_free_arenas take
        advantage of this to share code between the he arenas and the SV
@@ -53,7 +59,11 @@ struct he {
 struct hek {
     U32		hek_hash;	/* hash of key */
     I32		hek_len;	/* length of hash key */
+#ifdef PERL_GCC_BRACE_GROUPS_FORBIDDEN
     char	hek_key[1];	/* variable-length hash key */
+#else
+    char	hek_key[];      /* for easier debugging */
+#endif
     /* the hash-key is \0-terminated */
     /* after the \0 there is a byte for flags, such as whether the key
        is UTF-8 */
@@ -364,7 +374,7 @@ C<SV*>.
  */
 #define HvKEYS(hv)		HvUSEDKEYS(hv)
 #define HvUSEDKEYS(hv)		(HvTOTALKEYS(hv) - HvPLACEHOLDERS_get(hv))
-#define HvTOTALKEYS(hv)		XHvTOTALKEYS((XPVHV*) SvANY(hv))
+#define HvTOTALKEYS(hv)		XHvTOTALKEYS((XPVHV*)SvANY(hv))
 #define HvPLACEHOLDERS(hv)	(*Perl_hv_placeholders_p(aTHX_ MUTABLE_HV(hv)))
 #define HvPLACEHOLDERS_get(hv)	(SvMAGIC(hv) ? Perl_hv_placeholders_get(aTHX_ (const HV *)hv) : 0)
 #define HvPLACEHOLDERS_set(hv,p)	Perl_hv_placeholders_set(aTHX_ MUTABLE_HV(hv), p)
@@ -395,6 +405,7 @@ C<SV*>.
 #ifndef PERL_CORE
 #  define Nullhe Null(HE*)
 #endif
+#define AHe(ahe)		(ahe).hent_he
 #define HeNEXT(he)		(he)->hent_next
 #define HeKEY_hek(he)		(he)->hent_hek
 #define HeKEY(he)		HEK_KEY(HeKEY_hek(he))
@@ -470,13 +481,13 @@ C<SV*>.
 /* Default to allocating the correct size - default to assuming that malloc()
    is not broken and is efficient at allocating blocks sized at powers-of-two.
 */   
-#  define PERL_HV_ARRAY_ALLOC_BYTES(size) ((size) * sizeof(HE*))
+#  define PERL_HV_ARRAY_ALLOC_BYTES(size) ((size) * sizeof(AHE))
 #else
 #  define MALLOC_OVERHEAD 16
 #  define PERL_HV_ARRAY_ALLOC_BYTES(size) \
 			(((size) < 64)					\
-			 ? (size) * sizeof(HE*)				\
-			 : (size) * sizeof(HE*) * 2 - MALLOC_OVERHEAD)
+			 ? (size) * sizeof(AHE)				\
+			 : (size) * sizeof(AHE) * 2 - MALLOC_OVERHEAD)
 #endif
 
 /* Flags for hv_iternext_flags.  */

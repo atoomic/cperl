@@ -183,6 +183,7 @@ typedef enum {
 #define PERL_ARENA_ROOTS_SIZE	(SVt_LAST)
 
 /* typedefs to eliminate some typing */
+typedef struct array_he AHE;
 typedef struct he HE;
 typedef struct hek HEK;
 
@@ -273,7 +274,7 @@ typedef struct hek HEK;
 	SV*     svu_rv;		/* pointer to another SV */		\
 	struct regexp* svu_rx;		\
 	SV**    svu_array;		\
-	HE**	svu_hash;		\
+	AHE*	svu_hash;	/* pointer to HvARRAY, inlined AHE (2 words) */	\
 	GP*	svu_gp;			\
 	PerlIO *svu_fp;			\
     }	sv_u				\

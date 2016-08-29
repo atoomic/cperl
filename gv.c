@@ -1625,9 +1625,8 @@ S_parse_gv_stash_name(pTHX_ HV **stash, GV **gv, const char **name,
                             && strEQc(*name, "CORE"))
                             hv_name_set(*stash, "CORE", 4, 0);
                         else
-                            hv_name_set(
-                                *stash, nambeg, name_cursor-nambeg, is_utf8
-                            );
+                            hv_name_set(*stash, nambeg, name_cursor-nambeg,
+                                        is_utf8);
                     /* If the containing stash has multiple effective
                        names, see that this one gets them, too. */
                     if (HvAUX(GvSTASH(*gv))->xhv_name_count)
@@ -2451,7 +2450,7 @@ Perl_gv_check(pTHX_ HV *stash)
         const HE *entry;
         /* mark stash is being scanned, to avoid recursing */
         HvAUX(stash)->xhv_aux_flags |= HvAUXf_SCAN_STASH;
-	for (entry = HvARRAY(stash)[i]; entry; entry = HeNEXT(entry)) {
+	for (entry = AHe(HvARRAY(stash)[i]); entry; entry = HeNEXT(entry)) {
             GV *gv;
             HV *hv;
 	    STRLEN keylen = HeKLEN(entry);
